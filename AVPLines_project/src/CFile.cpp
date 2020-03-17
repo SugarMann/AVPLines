@@ -109,26 +109,26 @@ void CFile::makeTrainingSet(std::list<CMarkPoint>& f_mark_point_list)
 		//Loop through each MarkPoint
 		for (int i = 0; i < markpoint.getLenght()*2; i++)
 		{
-			//Only pair points are central points
+			//Only pair points in list are central points
 			if (i % 2 == 0) {
 
 				l_central_point = l_points[i];
 				l_direction_point = l_points[i+1.0];
 
 				//Correct negative and extended positions
-				l_roi.x = l_central_point.x - 30.0;
+				l_roi.x = l_central_point.x - 32.0;
 				if (l_roi.x < 0.0)
 					l_roi.x = 0.0;
 
-				l_roi.y = l_central_point.y - 30.0;
+				l_roi.y = l_central_point.y - 32.0;
 				if (l_roi.y < 0.0)
 					l_roi.y = 0.0;
 
-				l_roi.width = 60.0;
+				l_roi.width = 64.0;
 				if ((double)l_roi.y + (double)l_roi.width > 600.0)
 					l_roi.y = l_image.cols - l_roi.width;
 
-				l_roi.height = 60.0;
+				l_roi.height = 64.0;
 				if ((double)l_roi.x + (double)l_roi.height > 600.0)
 					l_roi.x = l_image.rows - l_roi.height;
 
@@ -147,21 +147,47 @@ void CFile::makeTrainingSet(std::list<CMarkPoint>& f_mark_point_list)
 				}
 				//Else the direction is up or down
 				else {
-					if (l_direction_point.x - l_central_point.x < 0)
+					if (l_direction_point.y - l_central_point.y < 0)
 						l_direction = 1;
 					else
 						l_direction = 3;
 				}
 
 				//Debug show croped images
-				cv::namedWindow("Display", cv::WINDOW_AUTOSIZE);
-				cv::imshow("Display", l_crop);
-				cv::waitKey(20);
+				//cv::namedWindow("Display", cv::WINDOW_AUTOSIZE);
+				//cv::imshow("Display", l_crop);
+				//cv::waitKey(20);
 				
 				//Write images in folder
 				l_cont++;
 				cv::imwrite(m_path + "\\dataset\\" + std::to_string(l_direction) + "\\" + std::to_string(l_cont) + ".bmp", l_crop);
 
+				//If we flip the image to opposite direction, we can multiplicate by 2 our dataset for each detector
+				switch (l_direction)
+				{
+				case 0:
+					cv::flip(l_crop, l_crop, 1);
+					l_cont++;
+					cv::imwrite(m_path + "\\dataset\\2\\" + std::to_string(l_cont) + ".bmp", l_crop);
+					break;
+				case 2:
+					cv::flip(l_crop, l_crop, 1);
+					l_cont++;
+					cv::imwrite(m_path + "\\dataset\\0\\" + std::to_string(l_cont) + ".bmp", l_crop);
+ 					break;
+				case 1:
+					cv::flip(l_crop, l_crop, 0);
+					l_cont++;
+					cv::imwrite(m_path + "\\dataset\\3\\" + std::to_string(l_cont) + ".bmp", l_crop);
+					break;
+				case 3:
+					cv::flip(l_crop, l_crop, 0);
+					l_cont++;
+					cv::imwrite(m_path + "\\dataset\\1\\" + std::to_string(l_cont) + ".bmp", l_crop);
+					break;
+				default:
+					break;
+				}
 			}
 		}
 	}
