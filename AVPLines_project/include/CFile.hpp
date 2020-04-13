@@ -23,13 +23,17 @@ public:
 	void setPath( std::string f_path );
 
 	//Methods
-	void fileNamesByExtension(std::string f_extension, std::vector<std::string>& f_file_names);
+	void fileNamesByExtension(std::string f_extension, std::vector< std::string >& f_file_names);
 
-	void readJson(const std::vector<std::string>& f_file_names, std::list<CMarkPoint>& f_mark_point_list);
+	void readJson(const std::vector< std::string >& f_file_names, std::list< CMarkPoint >& f_mark_point_list);
+	void writeCSV(const std::string& f_filename, cv::Mat& f_m);
+	void readCSV(cv::Mat& f_m);
 
-	void readBmp(const std::vector<std::string>& f_file_names, std::list<CMarkPoint>& f_mark_point_list);
+	void readBmp(const std::vector< std::string >& f_file_names, std::list< CMarkPoint >& f_mark_point_list);
+	void readBmp(const std::vector< std::string >& f_file_names, std::list< cv::Mat >& f_image_list);
 
-	void makeTrainingSet(std::list<CMarkPoint>& f_mark_point_list);
+	void makePositiveTrainingSet(std::list< CMarkPoint >& f_mark_point_list);
+	void makeNegativeTrainingSet(std::list< cv::Mat >& f_image_list);
 
 };
 

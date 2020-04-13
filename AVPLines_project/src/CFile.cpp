@@ -4,11 +4,13 @@
 #include <Windows.h>
 #include <fstream>
 #include <iterator>
+#include <iostream>
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/ml.hpp>
 
 //CFile constructors
 CFile::CFile(std::string f_path)
@@ -75,20 +77,29 @@ void CFile::readJson(const std::vector<std::string>& f_file_names, std::list<CMa
 	}
 }
 
-void CFile::readBmp(const std::vector<std::string>& f_file_names, std::list<CMarkPoint>& f_mark_point_list)
+void CFile::readBmp(const std::vector< std::string >& f_file_names, std::list< CMarkPoint >& f_mark_point_list)
 {
 	std::list<CMarkPoint>::iterator l_it = f_mark_point_list.begin();
+	cv::Mat l_image;
 
 	for (size_t i = 0; i<f_file_names.size(); i++)
 	{
-		cv::Mat l_image = cv::imread(m_path + "\\" + f_file_names[i]);
+		l_image = cv::imread(m_path + "\\" + f_file_names[i]);
 		l_it->setImage(l_image);
 		std::advance(l_it, 1);
 
 	}
 }
 
-void CFile::makeTrainingSet(std::list<CMarkPoint>& f_mark_point_list)
+void CFile::readBmp(const std::vector< std::string >& f_file_names, std::list< cv::Mat >& f_image_list)
+{
+	for ( std::string l_file : f_file_names )
+	{
+		f_image_list.push_back( cv::imread(m_path + "\\" + l_file) );
+	}
+}
+
+void CFile::makePositiveTrainingSet(std::list<CMarkPoint>& f_mark_point_list)
 {
 	cv::Mat l_image;
 	cv::Rect l_roi; //Roi markpoint
@@ -191,4 +202,100 @@ void CFile::makeTrainingSet(std::list<CMarkPoint>& f_mark_point_list)
 			}
 		}
 	}
+}
+
+void CFile::makeNegativeTrainingSet( std::list< cv::Mat >& f_image_list )
+{
+	//Variables
+	cv::Rect l_roi; //Roi markpoint
+	cv::Mat l_crop;
+	int l_count_white, l_count_black, l_count_green;
+	int l_count = 0;
+	cv::Vec3b l_pixel_value;
+
+	for ( cv::Mat l_image : f_image_list )
+	{
+
+		l_count++;
+		//Debug show image
+		//cv::namedWindow("Display image", cv::WINDOW_AUTOSIZE);
+		//cv::imshow("Display image", l_image);
+		//cv::waitKey(10);
+
+		for ( int i = 0, increment = 64; i < l_image.rows; i += increment )
+		{
+			for ( int j = 0, increment2 = 64; j < l_image.cols; j += increment2 )
+			{
+				l_count_black = 0;
+				l_count_white = 0;
+				l_count_green = 0;
+				l_roi.x = i;
+				l_roi.y = j;
+				l_roi.width = 64;
+				l_roi.height = 64;
+
+				if ( (l_roi.x + l_roi.width) > l_image.cols )
+					break;
+				else if ( (l_roi.y + l_roi.height) > l_image.rows )
+					break;
+				else
+					l_crop = l_image(l_roi);
+
+				//debug show all cropped images
+				//cv::namedWindow("DisplayBefore", cv::WINDOW_KEEPRATIO);
+				//cv::imshow("DisplayBefore", l_crop);
+				//cv::waitKey(20);
+
+				//Black and white pixels counter
+				for ( int x = 0; x < l_crop.rows; x++ )
+				{
+					for ( int y = 0; y < l_crop.cols; y++ )
+					{
+						l_pixel_value = l_crop.at<cv::Vec3b>(x, y);
+
+						if ( l_pixel_value == cv::Vec3b(255, 255, 255) )
+							l_count_white++;
+						if ( l_pixel_value == cv::Vec3b(0, 0, 0) )
+							l_count_black++;
+						if (l_pixel_value[0] <= 50 && l_pixel_value[1] >= 200 && l_pixel_value[2] <= 50)
+							l_count_green++;
+					}
+				}
+
+				//If more than 30% of pixels are white or black, it won't be processed
+				int threshold = l_crop.cols * l_crop.rows * 0.3;
+				if ( l_count_white > threshold )
+					continue;
+				if ( l_count_black > threshold )
+					continue;
+				if ( l_count_green > 0 )
+					continue;
+
+				//Debug show finally croped images
+				//cv::namedWindow("Display", cv::WINDOW_KEEPRATIO);
+				//cv::imshow("Display", l_crop);
+				//cv::waitKey(20);
+
+				//increase counter and write negative dataset
+				l_count++;
+				cv::cvtColor(l_crop, l_crop, cv::COLOR_RGB2GRAY);
+				cv::imwrite("resources/negative_samples/negative_" + std::to_string(l_count) + ".bmp", l_crop);
+
+			}
+		}
+	}
+}
+
+void CFile::writeCSV(const std::string& f_filename, cv::Mat& f_m)
+{
+	std::ofstream l_myfile;
+	l_myfile.open(f_filename.c_str());
+	l_myfile << cv::format(f_m, cv::Formatter::FMT_CSV) << std::endl;
+	l_myfile.close();
+}
+
+void CFile::readCSV( cv::Mat& f_m )
+{
+	cv::Ptr<cv::ml::TrainData> l_raw_data = cv::ml::TrainData::loadFromCSV(m_path, 0, -2, 0);
+	f_m = l_raw_data->getSamples();
 }
