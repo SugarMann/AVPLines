@@ -32,8 +32,8 @@ public:
 	void readBmp(const std::vector< std::string >& f_file_names, std::list< CMarkPoint >& f_mark_point_list);
 	void readBmp(const std::vector< std::string >& f_file_names, std::list< cv::Mat >& f_image_list);
 
-	void makePositiveTrainingSet(std::list< CMarkPoint >& f_mark_point_list);
-	void makeNegativeTrainingSet(std::list< cv::Mat >& f_image_list);
+	void makePositiveTrainingSet(std::list< CMarkPoint >& f_mark_point_list, uint8_t f_width, uint8_t f_height);
+	void makeNegativeTrainingSet(std::list< cv::Mat >& f_image_list, uint8_t f_width, uint8_t f_height);
 
 };
 

@@ -91,7 +91,7 @@ void CFile::readBmp(const std::vector< std::string >& f_file_names, std::list< C
 	}
 }
 
-void CFile::readBmp(const std::vector< std::string >& f_file_names, std::list< cv::Mat >& f_image_list)
+void CFile::readBmp( const std::vector< std::string >& f_file_names, std::list< cv::Mat >& f_image_list )
 {
 	for ( std::string l_file : f_file_names )
 	{
@@ -99,11 +99,12 @@ void CFile::readBmp(const std::vector< std::string >& f_file_names, std::list< c
 	}
 }
 
-void CFile::makePositiveTrainingSet(std::list<CMarkPoint>& f_mark_point_list)
+void CFile::makePositiveTrainingSet( std::list<CMarkPoint>& f_mark_point_list, uint8_t f_width, uint8_t f_height )
 {
 	cv::Mat l_image;
 	cv::Rect l_roi; //Roi markpoint
 	cv::Mat l_crop;
+	cv::Vec3b l_pixel_value;
 
 	std::vector<cv::Point2d> l_points;
 	int l_cont = 0;
@@ -127,19 +128,19 @@ void CFile::makePositiveTrainingSet(std::list<CMarkPoint>& f_mark_point_list)
 				l_direction_point = l_points[i+1.0];
 
 				//Correct negative and extended positions
-				l_roi.x = l_central_point.x - 32.0;
-				if (l_roi.x < 0.0)
-					l_roi.x = 0.0;
+				l_roi.x = l_central_point.x - (f_width / 2);
+				if (l_roi.x < 0)
+					l_roi.x = 0;
 
-				l_roi.y = l_central_point.y - 32.0;
-				if (l_roi.y < 0.0)
-					l_roi.y = 0.0;
+				l_roi.y = l_central_point.y - (f_height / 2);
+				if (l_roi.y < 0)
+					l_roi.y = 0;
 
-				l_roi.width = 64.0;
+				l_roi.width = f_width;
 				if ((double)l_roi.y + (double)l_roi.width > 600.0)
 					l_roi.y = l_image.cols - l_roi.width;
 
-				l_roi.height = 64.0;
+				l_roi.height = f_height;
 				if ((double)l_roi.x + (double)l_roi.height > 600.0)
 					l_roi.x = l_image.rows - l_roi.height;
 
@@ -165,10 +166,28 @@ void CFile::makePositiveTrainingSet(std::list<CMarkPoint>& f_mark_point_list)
 				}
 
 				//Debug show croped images
-				//cv::namedWindow("Display", cv::WINDOW_AUTOSIZE);
+				//cv::namedWindow("Display", cv::WINDOW_KEEPRATIO);
 				//cv::imshow("Display", l_crop);
 				//cv::waitKey(20);
 				
+				//Black pixels counter
+				int l_count_black = 0;
+				for (int x = 0; x < l_crop.rows; x++)
+				{
+					for (int y = 0; y < l_crop.cols; y++)
+					{
+						l_pixel_value = l_crop.at<cv::Vec3b>(x, y);
+
+						if (l_pixel_value == cv::Vec3b(0, 0, 0))
+							l_count_black++;
+					}
+				}
+
+				//If more than 1% of pixels are black, it won't be saved
+				int threshold = l_crop.cols * l_crop.rows * 0.01;
+				if (l_count_black > threshold)
+					continue;
+
 				//Write images in folder
 				l_cont++;
 				cv::imwrite(m_path + "\\dataset\\" + std::to_string(l_direction) + "\\" + std::to_string(l_cont) + ".bmp", l_crop);
@@ -204,7 +223,7 @@ void CFile::makePositiveTrainingSet(std::list<CMarkPoint>& f_mark_point_list)
 	}
 }
 
-void CFile::makeNegativeTrainingSet( std::list< cv::Mat >& f_image_list )
+void CFile::makeNegativeTrainingSet( std::list< cv::Mat >& f_image_list, uint8_t f_width, uint8_t f_height )
 {
 	//Variables
 	cv::Rect l_roi; //Roi markpoint
@@ -222,17 +241,17 @@ void CFile::makeNegativeTrainingSet( std::list< cv::Mat >& f_image_list )
 		//cv::imshow("Display image", l_image);
 		//cv::waitKey(10);
 
-		for ( int i = 0, increment = 64; i < l_image.rows; i += increment )
+		for ( int i = 0, increment = f_height; i < l_image.rows; i += increment )
 		{
-			for ( int j = 0, increment2 = 64; j < l_image.cols; j += increment2 )
+			for ( int j = 0, increment2 = f_width; j < l_image.cols; j += increment2 )
 			{
 				l_count_black = 0;
 				l_count_white = 0;
 				l_count_green = 0;
 				l_roi.x = i;
 				l_roi.y = j;
-				l_roi.width = 64;
-				l_roi.height = 64;
+				l_roi.width = f_width;
+				l_roi.height = f_height;
 
 				if ( (l_roi.x + l_roi.width) > l_image.cols )
 					break;
@@ -262,8 +281,8 @@ void CFile::makeNegativeTrainingSet( std::list< cv::Mat >& f_image_list )
 					}
 				}
 
-				//If more than 30% of pixels are white or black, it won't be processed
-				int threshold = l_crop.cols * l_crop.rows * 0.3;
+				//If more than 5% of pixels are white or black, it won't be processed
+				int threshold = l_crop.cols * l_crop.rows * 0.05;
 				if ( l_count_white > threshold )
 					continue;
 				if ( l_count_black > threshold )
@@ -274,12 +293,12 @@ void CFile::makeNegativeTrainingSet( std::list< cv::Mat >& f_image_list )
 				//Debug show finally croped images
 				//cv::namedWindow("Display", cv::WINDOW_KEEPRATIO);
 				//cv::imshow("Display", l_crop);
-				//cv::waitKey(20);
+				//cv::waitKey(0);
 
 				//increase counter and write negative dataset
 				l_count++;
 				cv::cvtColor(l_crop, l_crop, cv::COLOR_RGB2GRAY);
-				cv::imwrite("resources/negative_samples/negative_" + std::to_string(l_count) + ".bmp", l_crop);
+				cv::imwrite("resources/TrainingSet/negative_samples/dataset/0/negative_" + std::to_string(l_count) + ".bmp", l_crop);
 
 			}
 		}

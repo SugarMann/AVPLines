@@ -10,9 +10,6 @@
 #include <opencv2/objdetect.hpp>
 #include <opencv2/ml.hpp>
 
-//const int testStep = 5;
-//const int MAX_CLASSES = 2;
-
 //Define to write the markpoint dataset
 //#define MAKE_TRAINING_SET
 
@@ -50,6 +47,7 @@ int main( int argc, const char* argv[] )
 	std::list< cv::Mat > l_negative_samples_list;			//Negative samples list
 	std::list< cv::Mat > l_detector_lst;					//Detector list for each direction slot parking features and the last one is for negative samples
 	std::string l_model_path;
+	uint8_t l_width = 64, l_height = 64;
 
 	CFile l_file_object;
 
@@ -65,12 +63,12 @@ int main( int argc, const char* argv[] )
 		l_model_path = argv[2];
 
 		#ifdef MAKE_TRAINING_SET
-		writeNegativeTrainingSet( l_file_bmp_names, l_negative_samples_list, l_file_object );
-		writePositiveTrainingSet( l_file_json_names, l_file_bmp_names, l_mark_point_list, l_file_object );
+		writePositiveTrainingSet( l_file_json_names, l_file_bmp_names, l_mark_point_list, l_file_object, l_width, l_height );
+		writeNegativeTrainingSet( l_file_bmp_names, l_negative_samples_list, l_file_object, l_width, l_height ); 
 		#endif // MAKE_TRAINING_SET
 
 		#ifdef EXTRACT_FEATURES
-		featuresExtractor( l_file_object, l_file_bmp_names, l_detector_lst );
+		featuresExtractor( l_file_object, l_file_bmp_names, l_detector_lst, l_width, l_height );
 		#endif // EXTRACT_FEATURES
 
 		#ifdef TRAIN_DETECTORS
@@ -78,7 +76,7 @@ int main( int argc, const char* argv[] )
 		#endif // TRAIN_DETECTORS
 
 		#ifdef PREDICT_IMAGES
-		predictImages( l_model_path, l_file_object );
+		predictImages( l_model_path, l_file_object, l_width, l_height);
 		#endif // PREDICT_IMAGES
 
 	}
@@ -88,43 +86,53 @@ int main( int argc, const char* argv[] )
 
 // Write training set module
 //---------------------------------------------------------
-void writeNegativeTrainingSet( std::vector< std::string >& f_file_bmp_names, std::list< cv::Mat >& f_negative_samples_list, CFile& f_file_object )
+void writeNegativeTrainingSet( std::vector< std::string >& f_file_bmp_names, std::list< cv::Mat >& f_negative_samples_list, 
+	CFile& f_file_object, uint8_t f_width, uint8_t f_height)
 {
+	//Local variables
 	CFile l_file_object = f_file_object;
 	
+	std::cout << "---------------------------------------------------------" << std::endl;
+	std::cout << "--> Writing negative TrainingSet:" << std::endl;
+
 	l_file_object.setPath(l_file_object.getPath() + "\\negative_samples\\negView");
 	l_file_object.fileNamesByExtension("bmp", f_file_bmp_names);
 	l_file_object.readBmp(f_file_bmp_names, f_negative_samples_list);
 	//Make the training negative set og images
-	l_file_object.makeNegativeTrainingSet(f_negative_samples_list);
+	l_file_object.makeNegativeTrainingSet(f_negative_samples_list, f_width, f_height);
 
 }
 
 void writePositiveTrainingSet( std::vector< std::string >& f_file_json_names, std::vector< std::string >& f_file_bmp_names,
-	std::list< CMarkPoint >& f_mark_point_list, CFile& f_file_object )
+	std::list< CMarkPoint >& f_mark_point_list, CFile& f_file_object, uint8_t f_width, uint8_t f_height )
 {
+	//Local variables
 	CFile l_file_object = f_file_object;
+
+	std::cout << "---------------------------------------------------------" << std::endl;
+	std::cout << "--> Writing postive TrainingSet:" << std::endl;
 
 	l_file_object.setPath(l_file_object.getPath() + "\\positive_samples");
 	//Make a vector with all json file names in "positive samples"
-	f_file_object.fileNamesByExtension( "json", f_file_json_names );
+	l_file_object.fileNamesByExtension( "json", f_file_json_names );
 	//Make a vector with all bmp file names in "positive samples"
-	f_file_object.fileNamesByExtension( "bmp", f_file_bmp_names );
+	l_file_object.fileNamesByExtension( "bmp", f_file_bmp_names );
 
 	//Make a JSON MarkPoints object list, where each object have all MarkPoints in one image
-	f_file_object.readJson( f_file_json_names, f_mark_point_list );
+	l_file_object.readJson( f_file_json_names, f_mark_point_list );
 	f_file_json_names.clear();
 	//Set related image for every MarkPoint object
-	f_file_object.readBmp( f_file_bmp_names, f_mark_point_list );
+	l_file_object.readBmp( f_file_bmp_names, f_mark_point_list );
 	f_file_bmp_names.clear();
 	//Make the training set images with MarkPoint list information
-	f_file_object.makePositiveTrainingSet( f_mark_point_list );
+	l_file_object.makePositiveTrainingSet(f_mark_point_list, f_width, f_height );
 }
 //---------------------------------------------------------
 
 // Extract features module
 //---------------------------------------------------------
-void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_bmp_names, std::list<cv::Mat>& f_detector_lst )
+void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_bmp_names,
+	std::list<cv::Mat>& f_detector_lst, uint8_t f_width, uint8_t f_height )
 {
 	//Variables
 	cv::Mat l_mat;
@@ -137,6 +145,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 	//----------------------------------------
 	//Features extractor for positive samples
 	//----------------------------------------
+	std::cout << "	--> Extracting positive features." << std::endl;
 
 	//4 differents detector are trained (right, up, left, down markpoints directions)
 	for ( int i = 0; i <= 3; i++ )
@@ -169,7 +178,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 			#endif // DEBUG_LABEL_TRACE
 
 			//2nd Feature - Gradient Magnitude
-			computeHOG( l_mat, l_positive_gradient_vec);
+			computeHOG( l_mat, l_positive_gradient_vec, f_width, f_height);
 			
 		}
 		//Convert data to Machine Learning format
@@ -190,6 +199,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 	//----------------------------------------
 	//Features extractor for negative samples
 	//----------------------------------------
+	std::cout << "	--> Extracting negative features." << std::endl;
 
 	// Prepare path
 	l_file_object.setPath(f_file_object.getPath() + "\\negative_samples\\dataset\\0" );
@@ -219,7 +229,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 	#endif // DEBUG_LABEL_TRACE
 
 		//2nd Feature - Gradient Magnitude
-		computeHOG(l_negative_img, l_negative_gradient_vec);
+		computeHOG(l_negative_img, l_negative_gradient_vec, f_width, f_height);
 	}
 	//Convert data to Machine Learning format
 	convertToML(l_negative_gradient_vec, l_mat);
@@ -255,17 +265,19 @@ void stretchHistogram( cv::Mat& f_image )
 	}
 }
 
-void computeHOG( const cv::Mat& f_image, std::vector<cv::Mat>& f_gradient_lst )
+void computeHOG( const cv::Mat& f_image, std::vector<cv::Mat>& f_gradient_lst, uint8_t f_width, uint8_t f_height )
 {
 	//Variables
 	std::vector<float> l_descriptors;
 
 	//Histogram Of Gradients descriptor
+	//Link -> https://www.learnopencv.com/handwritten-digits-classification-an-opencv-c-python-tutorial/
+
 	cv::HOGDescriptor hog(
-		cv::Size(64, 64),							//winSize
-		cv::Size(16, 16),							//blockSize
-		cv::Size(8, 8),								//blockStride
-		cv::Size(8, 8),								//cellSize
+		cv::Size(f_width, f_height),							//winSize
+		cv::Size(f_width/2, f_height/2),							//blockSize
+		cv::Size(f_width/4, f_height/4),						//blockStride
+		cv::Size(f_width/4, f_height/4),						//cellSize
 		9,											//nbins
 		1,											//derivAper
 		-1,											//winSigma
@@ -323,6 +335,12 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 	cv::Mat l_error_mat, l_test_idx_mat;
 	float l_error;
 
+	//Train detectors. 4 differents detector are trained (right, up, left, down markpoints directions).
+	//---------------------------------------------------------
+	std::cout << "---------------------------------------------------------" << std::endl;
+	std::cout << "--> Train step:" << std::endl;
+	std::cout << "    --> Reading datasets" << std::endl;
+
 	//Read each feature csv file
 	//---------------------------------------------------------
 	for (int i = 0; i <= 3; i++)
@@ -360,11 +378,6 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 		cv::flip(l_mat, l_mat, 0);
 	}
 
-	//Train detectors. 4 differents detector are trained (right, up, left, down markpoints directions).
-	//---------------------------------------------------------
-	std::cout << "---------------------------------------------------------" << std::endl;
-	std::cout << "--> Train step:" << std::endl;
-
 	//Boost default parameters:
 	//	- boostType = Boost::REAL;
 	//	- weakCount = 100;
@@ -374,10 +387,10 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 
 	//Prepare boost object parameters
 	cv::Ptr<cv::ml::Boost> boost_ = cv::ml::Boost::create();
-	boost_->setBoostType(cv::ml::Boost::REAL);
-	boost_->setWeakCount(200);
-	boost_->setWeightTrimRate(0.95);
-	boost_->setMaxDepth(2);
+	boost_->setBoostType(cv::ml::Boost::LOGIT);
+	boost_->setWeakCount(100);
+	boost_->setWeightTrimRate(1.0);
+	boost_->setMaxDepth(10);
 	boost_->setUseSurrogates(false);
 
 	// Same steps for each detector
@@ -387,13 +400,13 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 		cv::Ptr<cv::ml::TrainData> data = cv::ml::TrainData::create(l_gradients[i], cv::ml::ROW_SAMPLE, l_labels[i]);
 
 		 //Select percentage for the training
-		data->setTrainTestSplitRatio(0.7, true);
-		//data->setTrainTestSplitRatio(0.99, false);
+		data->setTrainTestSplitRatio(0.8, true);
 		std::cout << "    --> Number of train samples: " << data->getNTrainSamples() << std::endl;
 		std::cout << "    --> Number of test samples: " << data->getNTestSamples() << std::endl;
 
-		l_test_idx_mat = data->getTestResponses();
-		l_file_object.writeCSV( f_model_path + "\\resources\\" + "Test_" + std::to_string(i) + ".csv", l_test_idx_mat);
+		//Write csv train data test
+		//l_test_idx_mat = data->getTestResponses();
+		//l_file_object.writeCSV( f_model_path + "\\resources\\" + "Test_" + std::to_string(i) + ".csv", l_test_idx_mat);
 	
 		//Train data
 		boost_->train(data);
@@ -403,7 +416,8 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 
 		//Calculate error over the split test data
 		l_error = boost_->calcError(data, true, l_error_mat);
-		l_file_object.writeCSV(f_model_path + "\\resources\\" + "ErrorModel_" + std::to_string(i) + ".csv", l_error_mat);
+		//Write csv error model
+		//l_file_object.writeCSV(f_model_path + "\\resources\\" + "ErrorModel_" + std::to_string(i) + ".csv", l_error_mat);
 		std::cout << "    --> Error percentage over test: " << l_error << std::endl;
 
 		//Calculate error over the split train data
@@ -423,18 +437,18 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 
 // Predict module
 //---------------------------------------------------------
-void predictImages( const std::string& f_model_path, CFile& f_file_object )
+void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8_t f_width, uint8_t f_height )
 {
 	//Variables
 	std::vector < cv::Ptr <cv::ml::Boost> > l_boost_detectors;
 	CFile l_file_object;
 	std::list< cv::Mat > l_image_list;
 	std::vector< std::string > l_file_names;
-	cv::Size l_small_size(64, 64);
-	cv::Mat l_crop_image;
+	cv::Mat l_crop_image, l_painted_image;
 	std::vector < cv::Mat > l_gradient;
 	float l_response_0, l_response_1, l_response_2, l_response_3;
-	uint32_t l_counter = 0;
+	cv::Rect2d l_rect_selected;
+	bool l_is_roi_selected = false;
 
 	std::cout << "---------------------------------------------------------" << std::endl;
 	std::cout << "--> Test step:" << std::endl;
@@ -450,68 +464,103 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object )
 		l_boost_detectors.push_back( cv::ml::StatModel::load<cv::ml::Boost>(f_model_path + "\\resources\\Model_" + std::to_string(i) + ".yml") );
 	}
 
-	#ifdef TIME_PROCESS
-	//Process time counter initialize
-	int64_t l_time1, l_time2;
-	l_time1 = cv::getTickCount();
-	#endif	// TIME_PROCESS
-
 	for (cv::Mat l_image : l_image_list)
 	{
+
+		#ifdef TIME_PROCESS
+		//Process time counter initialize
+		int64_t l_time1, l_time2;
+		l_time1 = cv::getTickCount();
+		#endif	// TIME_PROCESS
+
+		//Show original image
 		//cv::imshow("Original Image", l_image);
 		//cv::waitKey(0);
+		l_image.copyTo( l_painted_image );
+
+		//Select the roi that we don't need to process ( black box car in surround images )
+		if ( !l_is_roi_selected)
+		{
+			l_rect_selected = cv::selectROI(l_image);
+			l_is_roi_selected = true;
+		}
 
 		//Create grid over the original image to get the differents square pieces for process and predict
-		for (uint16_t y = 0; y < l_image.rows; y += l_small_size.height)
+		for (uint16_t y = 0; y < l_image.rows; y += f_height/1.5)
 		{
-			for (uint16_t x = 0; x < l_image.cols; x += l_small_size.width)
+			for (uint16_t x = 0; x < l_image.cols; x += f_width/1.5)
 			{
-				if (x + l_small_size.width > l_image.cols || y + l_small_size.height > l_image.rows)
+				//Size restriction
+				if ( x + f_width > l_image.cols || y + f_height > l_image.rows )
+					continue;
+
+				//Car restrictions
+				if ( x >= l_rect_selected.x &&
+					y >= l_rect_selected.y &&
+					x <= l_rect_selected.width + l_rect_selected.x &&
+					y <= l_rect_selected.height + l_rect_selected.y)
+					continue;
+				if ( x + f_width >= static_cast<uint16_t> ( l_rect_selected.x ) &&
+					 y + f_height >= static_cast<uint16_t> ( l_rect_selected.y ) &&
+					 x + f_width <= static_cast<uint16_t> ( l_rect_selected.width + l_rect_selected.x ) &&
+					 y + f_height <= static_cast<uint16_t> ( l_rect_selected.height + l_rect_selected.y ) )
+					continue;
+				if (x >= l_rect_selected.x && 
+					y + f_height >= static_cast<uint16_t> ( l_rect_selected.y ) &&
+					x <= l_rect_selected.width + l_rect_selected.x && 
+					y + f_height <= static_cast<uint16_t> ( l_rect_selected.height + l_rect_selected.y ) )
+					continue;
+				if (x + f_width >= static_cast<uint16_t> ( l_rect_selected.x ) &&
+					y >= l_rect_selected.y &&
+					x + f_width <= static_cast<uint16_t> ( l_rect_selected.width + l_rect_selected.x ) &&
+					y <= l_rect_selected.height + l_rect_selected.y)
 					continue;
 
 				//Crop image
-				cv::Rect l_rect = cv::Rect(x, y, l_small_size.width, l_small_size.height);
+				cv::Rect l_rect = cv::Rect(x, y, f_width, f_height);
 				l_crop_image = l_image(l_rect);
 
 				//Convert to grayscale
 				cv::cvtColor(l_crop_image, l_crop_image, cv::COLOR_RGB2GRAY);
 
+				//cv::imshow("Gray Image", l_crop_image);
+				//cv::waitKey(0);
+
 				//1st feature, improve contrast stretching grayscale histogram
 				stretchHistogram(l_crop_image);
 
-				//cv::imshow("Cropped Image", l_crop_image);
+				//cv::imshow("Stretched histogram Image", l_crop_image);
 				//cv::waitKey(0);
 
 				//2nd feature, calculate hog for that piece of image
-				computeHOG(l_crop_image, l_gradient);
+				computeHOG(l_crop_image, l_gradient, f_width, f_height);
 
 				//Predict with 4 detectors
-				std::cout << "\n--> Image: " << l_file_names[l_counter] << std::endl;
 				l_response_0 = l_boost_detectors[0]->predict(l_gradient.back());
-				std::cout << "    --> Prediction with detector_0: " << l_response_0 << std::endl;
 				l_response_1 = l_boost_detectors[1]->predict(l_gradient.back());
-				std::cout << "    --> Prediction with detector_1: " << l_response_1 << std::endl;
 				l_response_2 = l_boost_detectors[2]->predict(l_gradient.back());
-				std::cout << "    --> Prediction with detector_2: " << l_response_2 << std::endl;
 				l_response_3 = l_boost_detectors[3]->predict(l_gradient.back());
-				std::cout << "    --> Prediction with detector_3: " << l_response_3 << std::endl;
 
 				//Paint results
 				if (l_response_0 == 1)
 				{
-					cv::rectangle(l_image, l_rect, colors[RED]);
+					cv::rectangle(l_painted_image, l_rect, colors[RED]);
 				}
 				else if (l_response_1 == 1)
 				{
-					cv::rectangle(l_image, l_rect, colors[ORANGE]);
+					cv::rectangle(l_painted_image, l_rect, colors[ORANGE]);
 				}
 				else if (l_response_2 == 1)
 				{
-					cv::rectangle(l_image, l_rect, colors[YELLOW]);
+					cv::rectangle(l_painted_image, l_rect, colors[YELLOW]);
 				}
 				else if (l_response_3 == 1)
 				{
-					cv::rectangle(l_image, l_rect, colors[GREEN]);
+					cv::rectangle(l_painted_image, l_rect, colors[GREEN]);
+				}
+				else
+				{
+					cv::rectangle(l_painted_image, l_rect, cv::Scalar(255,255,255));
 				}
 
 				//Clean variables
@@ -524,16 +573,14 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object )
 		}
 
 		// Text info
-		cv::putText(l_image, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
-		cv::putText(l_image, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
-		cv::putText(l_image, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
-		cv::putText(l_image, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
+		cv::putText(l_painted_image, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
+		cv::putText(l_painted_image, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
+		cv::putText(l_painted_image, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
+		cv::putText(l_painted_image, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
 
-		cv::imshow("Results", l_image);
+		cv::imshow("Results", l_painted_image);
 		cv::waitKey(0);
 
-		//Increase counters
-		l_counter++;
 		#ifdef TIME_PROCESS
 			//Obtaining time of process
 			l_time2 = cv::getTickCount();
