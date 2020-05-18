@@ -20,10 +20,10 @@
 //#define EXTRACT_FEATURES
 
 //Define to train detectors
-#define TRAIN_DETECTORS
+//#define TRAIN_DETECTORS
 
 //Define to predict how works detectors
-#define PREDICT_IMAGES
+//#define PREDICT_IMAGES
 
 //Define to trace times of processing
 #define TIME_PROCESS
@@ -37,6 +37,9 @@ static cv::Scalar colors[] =
 	cv::Scalar(0, 255, 255),
 	cv::Scalar(0, 255, 0),
 };
+
+//Global variables
+int m_number_detectors = 3; //nº of detectors - 1
 
 int main( int argc, const char* argv[] )
 {
@@ -145,11 +148,12 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 	//----------------------------------------
 	//Features extractor for positive samples
 	//----------------------------------------
-	std::cout << "	--> Extracting positive features." << std::endl;
 
 	//4 differents detector are trained (right, up, left, down markpoints directions)
 	for ( int i = 0; i <= 3; i++ )
 	{
+		std::cout << "	--> Reading positive dataset number " << std::to_string(i) << "." << std::endl;
+
 		//Prepare different paths for each detector
 		l_file_object.setPath( f_file_object.getPath() + "\\positive_samples\\dataset\\" + std::to_string(i) );
 
@@ -158,6 +162,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 		std::list<CMarkPoint> l_mark_point_list( static_cast<int>( f_file_bmp_names.size() ), CMarkPoint() );
 		l_file_object.readBmp( f_file_bmp_names, l_mark_point_list );
 
+		std::cout << "	--> Extracting positive features for dataset number " << std::to_string(i) << "." << std::endl;
 		//Extract features
 		for ( CMarkPoint l_mark_point: l_mark_point_list )
 		{
@@ -169,7 +174,15 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 			cv::waitKey(0);
 			#endif // DEBUG_LABEL_TRACE
 
-			//1st Feature - Stretch the grayscale histogram
+			//Another way to remove noise
+			cv::GaussianBlur(l_mat, l_mat, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
+			
+			#ifdef DEBUG_LABEL_TRACE
+			cv::imshow("Cleaned image", l_mat);
+			cv::waitKey(0);
+			#endif // DEBUG_LABEL_TRACE
+
+			//Stretch the grayscale histogram
 			stretchHistogram(l_mat);
 
 			#ifdef DEBUG_LABEL_TRACE
@@ -177,8 +190,9 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 			cv::waitKey(0);
 			#endif // DEBUG_LABEL_TRACE
 
-			//2nd Feature - Gradient Magnitude
+			//Gradient Magnitude and Orientation
 			computeHOG( l_mat, l_positive_gradient_vec, f_width, f_height);
+			//computeHOGs(l_mat, l_positive_gradient_vec, f_width, f_height);
 			
 		}
 		//Convert data to Machine Learning format
@@ -220,7 +234,10 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 		cv::waitKey(0);
 	#endif // DEBUG_LABEL_TRACE
 
-		//1st Feature - Stretch the grayscale histogram
+		//Another way to remove noise
+		cv::GaussianBlur(l_negative_img, l_negative_img, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
+
+		//Stretch the grayscale histogram
 		stretchHistogram(l_negative_img);
 
 	#ifdef DEBUG_LABEL_TRACE
@@ -228,8 +245,10 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 		cv::waitKey(0);
 	#endif // DEBUG_LABEL_TRACE
 
-		//2nd Feature - Gradient Magnitude
+		//Gradient Magnitude and Orientation
 		computeHOG(l_negative_img, l_negative_gradient_vec, f_width, f_height);
+		//computeHOGs(l_negative_img, l_negative_gradient_vec, f_width, f_height);
+
 	}
 	//Convert data to Machine Learning format
 	convertToML(l_negative_gradient_vec, l_mat);
@@ -293,6 +312,78 @@ void computeHOG( const cv::Mat& f_image, std::vector<cv::Mat>& f_gradient_lst, u
 	f_gradient_lst.push_back( cv::Mat( l_descriptors ).clone() );
 }
 
+void computeHOGs(const cv::Mat& f_image, std::vector<cv::Mat>& f_gradient_lst, uint8_t f_width, uint8_t f_height)
+{
+	//Variables
+	std::vector<float> l_descriptors, l_descriptors_up, l_descriptors_down;
+	cv::Mat l_down_image, l_up_image;
+
+	//Histogram Of Gradients descriptor
+	//Link -> https://www.learnopencv.com/handwritten-digits-classification-an-opencv-c-python-tutorial/
+
+	//Down-scale and upscale the image to filter out the noise
+	cv::pyrDown(f_image, l_down_image, cv::Size(f_image.cols / 2, f_image.rows / 2));
+	cv::pyrUp(f_image, l_up_image, cv::Size(f_image.cols * 2, f_image.rows * 2));
+
+	cv::HOGDescriptor hog(
+		cv::Size(f_width, f_height),				//winSize
+		cv::Size(f_width / 2, f_height / 2),		//blockSize
+		cv::Size(f_width / 4, f_height / 4),		//blockStride
+		cv::Size(f_width / 4, f_height / 4),		//cellSize
+		9,											//nbins
+		1,											//derivAper
+		-1,											//winSigma
+		cv::HOGDescriptor::HistogramNormType(0),	//histogramNormType
+		0.2,										//L2HysThersh
+		true,										//gammal correction
+		64,											//nlevels
+		true										//use signed gradients
+	);
+
+	cv::HOGDescriptor hog_down(
+		cv::Size(l_down_image.cols, l_down_image.rows),				//winSize
+		cv::Size(l_down_image.cols / 2, l_down_image.rows / 2),		//blockSize
+		cv::Size(l_down_image.cols / 4, l_down_image.rows / 4),		//blockStride
+		cv::Size(l_down_image.cols / 4, l_down_image.rows / 4),		//cellSize
+		9,											//nbins
+		1,											//derivAper
+		-1,											//winSigma
+		cv::HOGDescriptor::HistogramNormType(0),	//histogramNormType
+		0.2,										//L2HysThersh
+		true,										//gammal correction
+		64,											//nlevels
+		true										//use signed gradients
+	);
+
+	cv::HOGDescriptor hog_up(
+		cv::Size(l_up_image.cols, l_up_image.rows),				//winSize
+		cv::Size(l_up_image.cols / 2, l_up_image.rows / 2),		//blockSize
+		cv::Size(l_up_image.cols / 4, l_up_image.rows / 4),		//blockStride
+		cv::Size(l_up_image.cols / 4, l_up_image.rows / 4),		//cellSize
+		9,											//nbins
+		1,											//derivAper
+		-1,											//winSigma
+		cv::HOGDescriptor::HistogramNormType(0),	//histogramNormType
+		0.2,										//L2HysThersh
+		true,										//gammal correction
+		64,											//nlevels
+		true										//use signed gradients
+	);
+
+	//Calculate magnitude and angle descriptors with hog and save them in gradients list
+	hog.compute(f_image, l_descriptors);
+	//Calculate descriptor for pyramid up image
+	hog_up.compute(l_up_image, l_descriptors_up);
+	//Reserve and store descriptors
+	l_descriptors.reserve(l_descriptors.size() * 3);
+	l_descriptors.insert(l_descriptors.end(), l_descriptors_up.begin(), l_descriptors_up.end());
+	//Calculate descriptor for pyramid down image
+	hog_down.compute(l_down_image, l_descriptors_down);
+	l_descriptors.insert(l_descriptors.end(), l_descriptors_down.begin(), l_descriptors_down.end());
+	//Push back into gradient list -> 3 descriptors (normal, upImage and downImage)
+	f_gradient_lst.push_back(cv::Mat(l_descriptors).clone());
+}
+
 /* @brief Convert training/testing set to be used by OpenCV Machine Learning algorithms. 
           Transposition of samples are made if needed.
    @param TrainData is a matrix of size (#samples x max(#cols,#rows) per samples), in 32FC1.
@@ -322,7 +413,6 @@ void convertToML( const std::vector<cv::Mat>& f_train_samples, cv::Mat& f_trainD
 	}
 }
 //---------------------------------------------------------
-
 // Training detectors module
 //---------------------------------------------------------
 void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
@@ -343,7 +433,7 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 
 	//Read each feature csv file
 	//---------------------------------------------------------
-	for (int i = 0; i <= 3; i++)
+	for (int i = 0; i <= m_number_detectors; i++)
 	{
 		//Prepare different paths for each detector
 		l_file_object.setPath(f_file_object.getPath() + "\\positive_samples\\dataset\\" + std::to_string(i) +
@@ -378,28 +468,29 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 		cv::flip(l_mat, l_mat, 0);
 	}
 
-	//Boost default parameters:
-	//	- boostType = Boost::REAL;
-	//	- weakCount = 100;
-	//	- weightTrimRate = 0.95;
-	//	- CVFolds = 0;
-	//	- maxDepth = 1;
-
 	//Prepare boost object parameters
-	cv::Ptr<cv::ml::Boost> boost_ = cv::ml::Boost::create();
-	boost_->setBoostType(cv::ml::Boost::LOGIT);
+	cv::Ptr< cv::ml::Boost > boost_ = cv::ml::Boost::create();
+	boost_->setBoostType(cv::ml::Boost::GENTLE);
 	boost_->setWeakCount(100);
-	boost_->setWeightTrimRate(1.0);
-	boost_->setMaxDepth(10);
+	boost_->setWeightTrimRate(0.99);
+	boost_->setMaxDepth(6);
 	boost_->setUseSurrogates(false);
 
+	//Prepare SVM object parameters
+	cv::Ptr< cv::ml::SVM > svm_ = cv::ml::SVM::create();
+	svm_->setType(cv::ml::SVM::C_SVC);
+	svm_->setKernel(cv::ml::SVM::RBF);
+	svm_->setC(2.5);
+	svm_->setGamma(0.50625);
+
+	std::cout << "    --> Number of detectors to train: " << m_number_detectors+1 << std::endl;
 	// Same steps for each detector
-	for (int i = 0; i <= 3; i++)
+	for (int i = 0; i <= m_number_detectors; i++)
 	{
 		//Prepare train data
 		cv::Ptr<cv::ml::TrainData> data = cv::ml::TrainData::create(l_gradients[i], cv::ml::ROW_SAMPLE, l_labels[i]);
 
-		 //Select percentage for the training
+		//Select percentage for the training
 		data->setTrainTestSplitRatio(0.8, true);
 		std::cout << "    --> Number of train samples: " << data->getNTrainSamples() << std::endl;
 		std::cout << "    --> Number of test samples: " << data->getNTestSamples() << std::endl;
@@ -407,25 +498,53 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 		//Write csv train data test
 		//l_test_idx_mat = data->getTestResponses();
 		//l_file_object.writeCSV( f_model_path + "\\resources\\" + "Test_" + std::to_string(i) + ".csv", l_test_idx_mat);
-	
-		//Train data
-		boost_->train(data);
-	
-		if (boost_->isTrained())
-			std::cout << "    --> Model trained" << std::endl;
 
-		//Calculate error over the split test data
+		std::cout << "    --> Training models" << std::endl;
+
+		//Boost train data
+		try {
+		boost_->train(data);
+
+		if (boost_->isTrained())
+			std::cout << "    --> Boost model trained" << std::endl;
+		}
+		catch (const std::exception & e) { // referencia a base de un objeto polimorfo
+			std::cout << e.what();
+		}
+
+		//SVM train data
+		try {
+			//svm_->trainAuto(data);
+			svm_->train(data);
+		}
+		catch (const std::exception & e) { // referencia a base de un objeto polimorfo
+			std::cout << e.what();
+		}
+
+		if (svm_->isTrained())
+			std::cout << "    --> SVM model trained" << std::endl;
+
+		//Calculate error over the split test data  for Boost model
 		l_error = boost_->calcError(data, true, l_error_mat);
+		std::cout << "    --> Boost error percentage over test: " << l_error << std::endl;
 		//Write csv error model
 		//l_file_object.writeCSV(f_model_path + "\\resources\\" + "ErrorModel_" + std::to_string(i) + ".csv", l_error_mat);
-		std::cout << "    --> Error percentage over test: " << l_error << std::endl;
 
-		//Calculate error over the split train data
+		//Calculate error over the split test data for SVM model
+		l_error = svm_->calcError(data, true, l_error_mat);
+		std::cout << "    --> SVM error percentage over test: " << l_error << std::endl;
+
+		//Calculate error over the split train data  for Boost model
 		l_error = boost_->calcError(data, false, l_error_mat);
-		std::cout << "    --> Error percentage over train: " << l_error << std::endl;
+		std::cout << "    --> Boost error percentage over train: " << l_error << std::endl;
 
-		boost_->save(f_model_path + "\\resources\\Model_" + std::to_string(i) + ".yml" );
-		std::cout << "    --> Model saved" << std::endl;
+		//Calculate error over the split train data  for SVM model
+		l_error = svm_->calcError(data, false, l_error_mat);
+		std::cout << "    --> SVM error percentage over train: " << l_error << std::endl;
+
+		svm_->save( f_model_path + "\\resources\\SVM_MarkPoint_Model_" + std::to_string(i) + ".yml" );
+		boost_->save( f_model_path + "\\resources\\Boost_MarkPoint_Model_" + std::to_string(i) + ".yml" );
+		std::cout << "    --> Models saved" << std::endl;
 
 		//Clear boost object
 		boost_->clear();
@@ -441,12 +560,13 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 {
 	//Variables
 	std::vector < cv::Ptr <cv::ml::Boost> > l_boost_detectors;
+	std::vector < cv::Ptr <cv::ml::SVM> > l_svm_detectors;
 	CFile l_file_object;
 	std::list< cv::Mat > l_image_list;
 	std::vector< std::string > l_file_names;
-	cv::Mat l_crop_image, l_painted_image;
+	cv::Mat l_crop_image, l_painted_boost_img, l_painted_svm_img;
 	std::vector < cv::Mat > l_gradient;
-	float l_response_0, l_response_1, l_response_2, l_response_3;
+	std::vector < float > l_boost_responses, l_svm_responses;
 	cv::Rect2d l_rect_selected;
 	bool l_is_roi_selected = false;
 
@@ -454,14 +574,20 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 	std::cout << "--> Test step:" << std::endl;
 
 	//Make a list of images for test
-	l_file_object.setPath(f_file_object.getPath() + "\\positive_samples");
+	l_file_object.setPath(f_file_object.getPath() + "\\..\\TestSet\\ForMarkingPoints"); //\\positive_samples
 	l_file_object.fileNamesByExtension("bmp", l_file_names);
 	l_file_object.readBmp(l_file_names, l_image_list);
 
-	//Read and load ML models
-	for (uint8_t i = 0; i <= 3; i++)
+	//Read and load ML boost models
+	for (uint8_t i = 0; i <= m_number_detectors; i++)
 	{
-		l_boost_detectors.push_back( cv::ml::StatModel::load<cv::ml::Boost>(f_model_path + "\\resources\\Model_" + std::to_string(i) + ".yml") );
+		l_boost_detectors.push_back( cv::ml::StatModel::load<cv::ml::Boost>(f_model_path + "\\resources\\Boost_MarkPoint_Model_" + std::to_string(i) + ".yml") );
+	}
+
+	//Read and load ML SVM models
+	for (uint8_t i = 0; i <= m_number_detectors; i++)
+	{
+		l_svm_detectors.push_back(cv::ml::StatModel::load<cv::ml::SVM>(f_model_path + "\\resources\\SVM_MarkPoint_Model_" + std::to_string(i) + ".yml"));
 	}
 
 	for (cv::Mat l_image : l_image_list)
@@ -476,7 +602,8 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		//Show original image
 		//cv::imshow("Original Image", l_image);
 		//cv::waitKey(0);
-		l_image.copyTo( l_painted_image );
+		l_image.copyTo( l_painted_boost_img );
+		l_image.copyTo(l_painted_svm_img);
 
 		//Select the roi that we don't need to process ( black box car in surround images )
 		if ( !l_is_roi_selected)
@@ -486,9 +613,9 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		}
 
 		//Create grid over the original image to get the differents square pieces for process and predict
-		for (uint16_t y = 0; y < l_image.rows; y += f_height/1.5)
+		for (uint16_t y = 0; y < l_image.rows; y += f_height/2)
 		{
-			for (uint16_t x = 0; x < l_image.cols; x += f_width/1.5)
+			for (uint16_t x = 0; x < l_image.cols; x += f_width/2)
 			{
 				//Size restriction
 				if ( x + f_width > l_image.cols || y + f_height > l_image.rows )
@@ -526,59 +653,201 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 				//cv::imshow("Gray Image", l_crop_image);
 				//cv::waitKey(0);
 
-				//1st feature, improve contrast stretching grayscale histogram
+				//Down-scale and upscale the image to filter out the noise
+				cv::GaussianBlur(l_crop_image, l_crop_image, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
+
+				//cv::imshow("Filtering noise", l_crop_image);
+				//cv::waitKey(0);
+
+				//Improve contrast stretching grayscale histogram
 				stretchHistogram(l_crop_image);
 
 				//cv::imshow("Stretched histogram Image", l_crop_image);
 				//cv::waitKey(0);
 
-				//2nd feature, calculate hog for that piece of image
+				//Calculate hog for that piece of image
 				computeHOG(l_crop_image, l_gradient, f_width, f_height);
+				//computeHOGs(l_crop_image, l_gradient, f_width, f_height);
 
-				//Predict with 4 detectors
-				l_response_0 = l_boost_detectors[0]->predict(l_gradient.back());
-				l_response_1 = l_boost_detectors[1]->predict(l_gradient.back());
-				l_response_2 = l_boost_detectors[2]->predict(l_gradient.back());
-				l_response_3 = l_boost_detectors[3]->predict(l_gradient.back());
+				//Traspose features matrix
+				l_gradient.back() = l_gradient.back().t();
 
-				//Paint results
-				if (l_response_0 == 1)
+				//Predict with Boost detectors 
+				for (uint8_t i = 0; i <= m_number_detectors; i++) 
 				{
-					cv::rectangle(l_painted_image, l_rect, colors[RED]);
+					l_boost_responses.push_back( l_boost_detectors[i]->predict(l_gradient.back()) );
 				}
-				else if (l_response_1 == 1)
+
+				//Predict with SVM detectors
+				for (uint8_t i = 0; i <= m_number_detectors; i++)
 				{
-					cv::rectangle(l_painted_image, l_rect, colors[ORANGE]);
+					l_svm_responses.push_back( l_svm_detectors[i]->predict(l_gradient.back()) );
 				}
-				else if (l_response_2 == 1)
+
+				//Paint boost results
+				switch (l_boost_responses.size())
 				{
-					cv::rectangle(l_painted_image, l_rect, colors[YELLOW]);
+				case 1:
+					if (l_boost_responses[0] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
+					}
+					else
+					{
+						//cv::rectangle(l_painted_boost_img, l_rect, cv::Scalar(255,255,255));
+					}
+					break;
+				case 2:
+					if (l_boost_responses[0] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
+					}
+					else if (l_boost_responses[1] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
+					}
+					else
+					{
+						//cv::rectangle(l_painted_boost_img, l_rect, cv::Scalar(255,255,255));
+					}
+					break;
+				case 3:
+					if (l_boost_responses[0] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
+					}
+					else if (l_boost_responses[1] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
+					}
+					else if (l_boost_responses[2] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[YELLOW]);
+					}
+					else
+					{
+						//cv::rectangle(l_painted_boost_img, l_rect, cv::Scalar(255,255,255));
+					}
+					break;
+				case 4:
+					if (l_boost_responses[0] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
+					}
+					else if (l_boost_responses[1] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
+					}
+					else if (l_boost_responses[2] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[YELLOW]);
+					}
+					else if (l_boost_responses[3] == 1)
+					{
+						cv::rectangle(l_painted_boost_img, l_rect, colors[GREEN]);
+					}
+					else
+					{
+						//cv::rectangle(l_painted_boost_img, l_rect, cv::Scalar(255,255,255));
+					}
+					break;
 				}
-				else if (l_response_3 == 1)
+
+				//Paint svm results
+
+				switch (l_svm_responses.size()) 
 				{
-					cv::rectangle(l_painted_image, l_rect, colors[GREEN]);
-				}
-				else
-				{
-					cv::rectangle(l_painted_image, l_rect, cv::Scalar(255,255,255));
+				case 1:
+					if (l_svm_responses[0] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+					}
+					else
+					{
+						//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
+					}
+					break;
+				case 2:
+					if (l_svm_responses[0] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+					}
+					else if (l_svm_responses[1] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
+					}
+					else
+					{
+						//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
+					}
+					break;
+				case 3:
+					if (l_svm_responses[0] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+					}
+					else if (l_svm_responses[1] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
+					}
+					else if (l_svm_responses[2] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
+					}
+					else
+					{
+						//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
+					}
+					break;
+				case 4:
+					if (l_svm_responses[0] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+					}
+					else if (l_svm_responses[1] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
+					}
+					else if (l_svm_responses[2] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
+					}
+					else if (l_svm_responses[3] == 1)
+					{
+						cv::rectangle(l_painted_svm_img, l_rect, colors[GREEN]);
+					}
+					else
+					{
+						//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
+					}
+					break;
+
 				}
 
 				//Clean variables
 				if (!l_gradient.empty())
 				{
-					l_gradient.pop_back();
+					l_gradient.pop_back(); 
+					l_boost_responses.clear();
+					l_svm_responses.clear();
 				}
 
 			}
 		}
 
 		// Text info
-		cv::putText(l_painted_image, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
-		cv::putText(l_painted_image, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
-		cv::putText(l_painted_image, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
-		cv::putText(l_painted_image, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
+		cv::putText(l_painted_svm_img, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
+		cv::putText(l_painted_svm_img, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
+		cv::putText(l_painted_svm_img, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
+		cv::putText(l_painted_svm_img, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
 
-		cv::imshow("Results", l_painted_image);
+		cv::putText(l_painted_boost_img, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
+		cv::putText(l_painted_boost_img, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
+		cv::putText(l_painted_boost_img, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
+		cv::putText(l_painted_boost_img, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
+
+		cv::imshow("Boost Results", l_painted_boost_img);
+		cv::imshow("SVM Results", l_painted_svm_img);
 		cv::waitKey(0);
 
 		#ifdef TIME_PROCESS

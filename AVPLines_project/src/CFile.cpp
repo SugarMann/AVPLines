@@ -193,7 +193,7 @@ void CFile::makePositiveTrainingSet( std::list<CMarkPoint>& f_mark_point_list, u
 				cv::imwrite(m_path + "\\dataset\\" + std::to_string(l_direction) + "\\" + std::to_string(l_cont) + ".bmp", l_crop);
 
 				//If we flip the image to opposite direction, we can multiplicate by 2 our dataset for each detector
-				switch (l_direction)
+				/*switch (l_direction)
 				{
 				case 0:
 					cv::flip(l_crop, l_crop, 1);
@@ -217,7 +217,7 @@ void CFile::makePositiveTrainingSet( std::list<CMarkPoint>& f_mark_point_list, u
 					break;
 				default:
 					break;
-				}
+				}*/
 			}
 		}
 	}
