@@ -23,7 +23,7 @@
 //#define TRAIN_DETECTORS
 
 //Define to predict how works detectors
-//#define PREDICT_IMAGES
+#define PREDICT_IMAGES
 
 //Define to trace times of processing
 #define TIME_PROCESS
@@ -40,6 +40,8 @@ static cv::Scalar colors[] =
 
 //Global variables
 int m_number_detectors = 3; //nº of detectors - 1
+float m_confidence = 0.5f;
+bool hogs_sel = true;
 
 int main( int argc, const char* argv[] )
 {
@@ -191,8 +193,13 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 			#endif // DEBUG_LABEL_TRACE
 
 			//Gradient Magnitude and Orientation
-			computeHOG( l_mat, l_positive_gradient_vec, f_width, f_height);
-			//computeHOGs(l_mat, l_positive_gradient_vec, f_width, f_height);
+			if (hogs_sel)
+			{
+				computeHOGs(l_mat, l_positive_gradient_vec, f_width, f_height);
+			}
+			else {
+				computeHOG(l_mat, l_positive_gradient_vec, f_width, f_height);
+			}
 			
 		}
 		//Convert data to Machine Learning format
@@ -246,8 +253,13 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 	#endif // DEBUG_LABEL_TRACE
 
 		//Gradient Magnitude and Orientation
-		computeHOG(l_negative_img, l_negative_gradient_vec, f_width, f_height);
-		//computeHOGs(l_negative_img, l_negative_gradient_vec, f_width, f_height);
+		if (hogs_sel)
+		{
+			computeHOGs(l_negative_img, l_negative_gradient_vec, f_width, f_height);
+		}
+		else {
+			computeHOG(l_negative_img, l_negative_gradient_vec, f_width, f_height);
+		}
 
 	}
 	//Convert data to Machine Learning format
@@ -515,7 +527,7 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 		//SVM train data
 		try {
 			//svm_->trainAuto(data);
-			svm_->train(data);
+			svm_->trainAuto(data);
 		}
 		catch (const std::exception & e) { // referencia a base de un objeto polimorfo
 			std::cout << e.what();
@@ -569,6 +581,8 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 	std::vector < float > l_boost_responses, l_svm_responses;
 	cv::Rect2d l_rect_selected;
 	bool l_is_roi_selected = false;
+	float l_distance;
+	std::vector < float > l_confidence_vector;
 
 	std::cout << "---------------------------------------------------------" << std::endl;
 	std::cout << "--> Test step:" << std::endl;
@@ -666,8 +680,13 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 				//cv::waitKey(0);
 
 				//Calculate hog for that piece of image
-				computeHOG(l_crop_image, l_gradient, f_width, f_height);
-				//computeHOGs(l_crop_image, l_gradient, f_width, f_height);
+				if (hogs_sel)
+				{
+					computeHOGs(l_crop_image, l_gradient, f_width, f_height);
+				}
+				else {
+					computeHOG(l_crop_image, l_gradient, f_width, f_height);
+				}
 
 				//Traspose features matrix
 				l_gradient.back() = l_gradient.back().t();
@@ -682,7 +701,40 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 				for (uint8_t i = 0; i <= m_number_detectors; i++)
 				{
 					l_svm_responses.push_back( l_svm_detectors[i]->predict(l_gradient.back()) );
+					if (l_svm_responses[i] == 1)
+					{
+						l_distance = distanceSample(l_gradient.back(), l_svm_detectors[i]);
+						if (l_distance != 0)
+							l_confidence_vector.push_back( 1.0 / ( 1.0 + std::exp(-l_distance) ) );
+					}
+					else {
+						l_confidence_vector.push_back(0);
+					}
+					
 				}
+
+				for (uint8_t i = 0; i <= m_number_detectors; i++)
+				{
+					if (l_confidence_vector[i] >= m_confidence)
+					{
+						switch (i)
+						{
+						case 0:
+							cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+							break;
+						case 1:
+							cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
+							break;
+						case 2:
+							cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
+							break;
+						case 3:
+							cv::rectangle(l_painted_svm_img, l_rect, colors[GREEN]);
+							break;
+						}
+					}
+				}
+
 
 				//Paint boost results
 				switch (l_boost_responses.size())
@@ -755,74 +807,74 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 
 				//Paint svm results
 
-				switch (l_svm_responses.size()) 
-				{
-				case 1:
-					if (l_svm_responses[0] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
-					}
-					else
-					{
-						//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
-					}
-					break;
-				case 2:
-					if (l_svm_responses[0] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
-					}
-					else if (l_svm_responses[1] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
-					}
-					else
-					{
-						//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
-					}
-					break;
-				case 3:
-					if (l_svm_responses[0] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
-					}
-					else if (l_svm_responses[1] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
-					}
-					else if (l_svm_responses[2] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
-					}
-					else
-					{
-						//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
-					}
-					break;
-				case 4:
-					if (l_svm_responses[0] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
-					}
-					else if (l_svm_responses[1] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
-					}
-					else if (l_svm_responses[2] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
-					}
-					else if (l_svm_responses[3] == 1)
-					{
-						cv::rectangle(l_painted_svm_img, l_rect, colors[GREEN]);
-					}
-					else
-					{
-						//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
-					}
-					break;
+				//switch (l_svm_responses.size()) 
+				//{
+				//case 1:
+				//	if (l_svm_responses[0] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+				//	}
+				//	else
+				//	{
+				//		//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
+				//	}
+				//	break;
+				//case 2:
+				//	if (l_svm_responses[0] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+				//	}
+				//	else if (l_svm_responses[1] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
+				//	}
+				//	else
+				//	{
+				//		//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
+				//	}
+				//	break;
+				//case 3:
+				//	if (l_svm_responses[0] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+				//	}
+				//	else if (l_svm_responses[1] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
+				//	}
+				//	else if (l_svm_responses[2] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
+				//	}
+				//	else
+				//	{
+				//		//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
+				//	}
+				//	break;
+				//case 4:
+				//	if (l_svm_responses[0] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+				//	}
+				//	else if (l_svm_responses[1] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
+				//	}
+				//	else if (l_svm_responses[2] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
+				//	}
+				//	else if (l_svm_responses[3] == 1)
+				//	{
+				//		cv::rectangle(l_painted_svm_img, l_rect, colors[GREEN]);
+				//	}
+				//	else
+				//	{
+				//		//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
+				//	}
+				//	break;
 
-				}
+				//}
 
 				//Clean variables
 				if (!l_gradient.empty())
@@ -830,6 +882,7 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 					l_gradient.pop_back(); 
 					l_boost_responses.clear();
 					l_svm_responses.clear();
+					l_confidence_vector.clear();
 				}
 
 			}
@@ -863,5 +916,27 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		#endif // TIME_PROCESS
 
 	}
+}
+
+float distanceSample(cv::Mat& f_sample, const cv::Ptr <cv::ml::Boost>& f_boost)
+{
+	//Variables
+	cv::Mat l_result;
+	float l_distance;
+
+	f_boost->predict(f_sample, l_result, cv::ml::StatModel::Flags::RAW_OUTPUT);
+	l_distance = l_result.at<float>(0, 0);
+	return l_distance;
+}
+
+float distanceSample(cv::Mat& f_sample, const cv::Ptr <cv::ml::SVM>& f_svm)
+{
+	//Variables
+	cv::Mat l_result;
+	float l_distance;
+
+	f_svm->predict(f_sample, l_result, cv::ml::StatModel::Flags::RAW_OUTPUT);
+	l_distance = l_result.at<float>(0, 0);
+	return l_distance;
 }
 //---------------------------------------------------------

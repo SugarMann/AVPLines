@@ -6,6 +6,8 @@
 #include <iostream>
 #include <list>
 #include <vector>
+#include <opencv2/ml.hpp>
+
 
 //Main
 int main(int argc, const char* argv[]); 
@@ -31,4 +33,7 @@ void convertToML( const std::vector< cv::Mat >& f_train_samples, cv::Mat& f_trai
 void trainDetectors( CFile& f_file_object, const std::string& f_model_path );
 
 void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8_t f_width, uint8_t f_height );
+
+float distanceSample(cv::Mat& f_sample, const cv::Ptr <cv::ml::Boost>& f_boost);
+float distanceSample(cv::Mat& f_sample, const cv::Ptr <cv::ml::SVM>& f_svm);
 
