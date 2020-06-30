@@ -351,3 +351,4 @@ MigrationBackup/
 
 #Resources folder (training set of positive and negative samples)
 resources/
+resources.zip

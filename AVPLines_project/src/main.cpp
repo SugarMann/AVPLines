@@ -576,13 +576,14 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 	CFile l_file_object;
 	std::list< cv::Mat > l_image_list;
 	std::vector< std::string > l_file_names;
-	cv::Mat l_crop_image, l_painted_boost_img, l_painted_svm_img;
+	cv::Mat l_crop_image, l_painted_boost_img, l_painted_svm_img, l_aux, l_aux2;
 	std::vector < cv::Mat > l_gradient;
 	std::vector < float > l_boost_responses, l_svm_responses;
 	cv::Rect2d l_rect_selected;
 	bool l_is_roi_selected = false;
 	float l_distance;
 	std::vector < float > l_confidence_vector;
+	std::vector < cv::Rect > l_up_rectangles, l_down_rectangles, l_right_rectangles, l_left_rectangles;
 
 	std::cout << "---------------------------------------------------------" << std::endl;
 	std::cout << "--> Test step:" << std::endl;
@@ -599,10 +600,10 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 	}
 
 	//Read and load ML SVM models
-	for (uint8_t i = 0; i <= m_number_detectors; i++)
-	{
-		l_svm_detectors.push_back(cv::ml::StatModel::load<cv::ml::SVM>(f_model_path + "\\resources\\SVM_MarkPoint_Model_" + std::to_string(i) + ".yml"));
-	}
+	//for (uint8_t i = 0; i <= m_number_detectors; i++)
+	//{
+	//	l_svm_detectors.push_back(cv::ml::StatModel::load<cv::ml::SVM>(f_model_path + "\\resources\\SVM_MarkPoint_Model_" + std::to_string(i) + ".yml"));
+	//}
 
 	for (cv::Mat l_image : l_image_list)
 	{
@@ -618,6 +619,8 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		//cv::waitKey(0);
 		l_image.copyTo( l_painted_boost_img );
 		l_image.copyTo(l_painted_svm_img);
+		l_image.copyTo(l_aux);
+		l_image.copyTo(l_aux2);
 
 		//Select the roi that we don't need to process ( black box car in surround images )
 		if ( !l_is_roi_selected)
@@ -627,9 +630,9 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		}
 
 		//Create grid over the original image to get the differents square pieces for process and predict
-		for (uint16_t y = 0; y < l_image.rows; y += f_height/2)
+		for (uint16_t y = 0; y < l_image.rows; y += f_height/6)
 		{
-			for (uint16_t x = 0; x < l_image.cols; x += f_width/2)
+			for (uint16_t x = 0; x < l_image.cols; x += f_width/6)
 			{
 				//Size restriction
 				if ( x + f_width > l_image.cols || y + f_height > l_image.rows )
@@ -691,190 +694,81 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 				//Traspose features matrix
 				l_gradient.back() = l_gradient.back().t();
 
+				////Predict with SVM detectors
+				//for (uint8_t i = 0; i <= m_number_detectors; i++)
+				//{
+				//	l_svm_responses.push_back( l_svm_detectors[i]->predict(l_gradient.back()) );
+				//	if (l_svm_responses[i] == 1)
+				//	{
+				//		l_distance = distanceSample(l_gradient.back(), l_svm_detectors[i]);
+				//		if (l_distance != 0)
+				//			l_confidence_vector.push_back( 1.0 / ( 1.0 + std::exp(-l_distance) ) );
+				//	}
+				//	else {
+				//		l_confidence_vector.push_back(0);
+				//	}
+				//	
+				//}
+
+				////Paint SVM results
+				//for (uint8_t i = 0; i <= m_number_detectors; i++)
+				//{
+				//	if (l_confidence_vector[i] >= m_confidence)
+				//	{
+				//		switch (i)
+				//		{
+				//		case 0:
+				//			cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+				//			break;
+				//		case 1:
+				//			cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
+				//			break;
+				//		case 2:
+				//			cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
+				//			break;
+				//		case 3:
+				//			cv::rectangle(l_painted_svm_img, l_rect, colors[GREEN]);
+				//			break;
+				//		}
+				//	}
+				//}
+
 				//Predict with Boost detectors 
-				for (uint8_t i = 0; i <= m_number_detectors; i++) 
-				{
-					l_boost_responses.push_back( l_boost_detectors[i]->predict(l_gradient.back()) );
-				}
-
-				//Predict with SVM detectors
 				for (uint8_t i = 0; i <= m_number_detectors; i++)
 				{
-					l_svm_responses.push_back( l_svm_detectors[i]->predict(l_gradient.back()) );
-					if (l_svm_responses[i] == 1)
-					{
-						l_distance = distanceSample(l_gradient.back(), l_svm_detectors[i]);
-						if (l_distance != 0)
-							l_confidence_vector.push_back( 1.0 / ( 1.0 + std::exp(-l_distance) ) );
-					}
-					else {
-						l_confidence_vector.push_back(0);
-					}
-					
+					l_boost_responses.push_back(l_boost_detectors[i]->predict(l_gradient.back()));
 				}
 
+				//Paint boost results
 				for (uint8_t i = 0; i <= m_number_detectors; i++)
 				{
-					if (l_confidence_vector[i] >= m_confidence)
+					if (l_boost_responses[i] >= 1)
 					{
 						switch (i)
 						{
 						case 0:
-							cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
+							cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
+							//Store rectangles to correct overlapping
+							l_right_rectangles.push_back(l_rect);
 							break;
 						case 1:
-							cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
+							cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
+							//Store rectangles to correct overlapping
+							l_up_rectangles.push_back(l_rect);
 							break;
 						case 2:
-							cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
+							cv::rectangle(l_painted_boost_img, l_rect, colors[YELLOW]);
+							//Store rectangles to correct overlapping
+							l_left_rectangles.push_back(l_rect);
 							break;
 						case 3:
-							cv::rectangle(l_painted_svm_img, l_rect, colors[GREEN]);
+							cv::rectangle(l_painted_boost_img, l_rect, colors[GREEN]);
+							//Store rectangles to correct overlapping
+							l_down_rectangles.push_back(l_rect);
 							break;
 						}
 					}
 				}
-
-
-				//Paint boost results
-				switch (l_boost_responses.size())
-				{
-				case 1:
-					if (l_boost_responses[0] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
-					}
-					else
-					{
-						//cv::rectangle(l_painted_boost_img, l_rect, cv::Scalar(255,255,255));
-					}
-					break;
-				case 2:
-					if (l_boost_responses[0] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
-					}
-					else if (l_boost_responses[1] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
-					}
-					else
-					{
-						//cv::rectangle(l_painted_boost_img, l_rect, cv::Scalar(255,255,255));
-					}
-					break;
-				case 3:
-					if (l_boost_responses[0] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
-					}
-					else if (l_boost_responses[1] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
-					}
-					else if (l_boost_responses[2] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[YELLOW]);
-					}
-					else
-					{
-						//cv::rectangle(l_painted_boost_img, l_rect, cv::Scalar(255,255,255));
-					}
-					break;
-				case 4:
-					if (l_boost_responses[0] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
-					}
-					else if (l_boost_responses[1] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
-					}
-					else if (l_boost_responses[2] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[YELLOW]);
-					}
-					else if (l_boost_responses[3] == 1)
-					{
-						cv::rectangle(l_painted_boost_img, l_rect, colors[GREEN]);
-					}
-					else
-					{
-						//cv::rectangle(l_painted_boost_img, l_rect, cv::Scalar(255,255,255));
-					}
-					break;
-				}
-
-				//Paint svm results
-
-				//switch (l_svm_responses.size()) 
-				//{
-				//case 1:
-				//	if (l_svm_responses[0] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
-				//	}
-				//	else
-				//	{
-				//		//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
-				//	}
-				//	break;
-				//case 2:
-				//	if (l_svm_responses[0] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
-				//	}
-				//	else if (l_svm_responses[1] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
-				//	}
-				//	else
-				//	{
-				//		//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
-				//	}
-				//	break;
-				//case 3:
-				//	if (l_svm_responses[0] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
-				//	}
-				//	else if (l_svm_responses[1] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
-				//	}
-				//	else if (l_svm_responses[2] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
-				//	}
-				//	else
-				//	{
-				//		//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
-				//	}
-				//	break;
-				//case 4:
-				//	if (l_svm_responses[0] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
-				//	}
-				//	else if (l_svm_responses[1] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
-				//	}
-				//	else if (l_svm_responses[2] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
-				//	}
-				//	else if (l_svm_responses[3] == 1)
-				//	{
-				//		cv::rectangle(l_painted_svm_img, l_rect, colors[GREEN]);
-				//	}
-				//	else
-				//	{
-				//		//cv::rectangle(l_painted_svm_img, l_rect, cv::Scalar(255, 255, 255));
-				//	}
-				//	break;
-
-				//}
 
 				//Clean variables
 				if (!l_gradient.empty())
@@ -888,20 +782,96 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 			}
 		}
 
+		//Correct overlap in detections
+		cv::groupRectangles(l_right_rectangles, 2, 0.2);
+		cv::groupRectangles(l_up_rectangles, 2, 0.2);
+		cv::groupRectangles(l_left_rectangles, 2, 0.2);
+		cv::groupRectangles(l_down_rectangles, 2, 0.2); 
+		
+		for (size_t i = 0; i <= l_right_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux, l_right_rectangles[i], colors[RED]);
+		}
+		for (size_t i = 0; i <= l_up_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux, l_up_rectangles[i], colors[ORANGE]);
+		}
+		for (size_t i = 0; i <= l_left_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux, l_left_rectangles[i], colors[YELLOW]);
+		}
+		for (size_t i = 0; i <= l_down_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux, l_down_rectangles[i], colors[GREEN]);
+		}
+
+		cv::imshow("Correcting overlapping", l_aux);
+
+		int size = l_right_rectangles.size();
+		for(int i = 0; i < size; i++)
+		{
+			l_right_rectangles.push_back(cv::Rect(l_right_rectangles[i]));
+		}
+		size = l_left_rectangles.size();
+		for (int i = 0; i < size; i++)
+		{
+			l_left_rectangles.push_back(cv::Rect(l_left_rectangles[i]));
+		}
+		size = l_up_rectangles.size();
+		for (int i = 0; i < size; i++)
+		{
+			l_up_rectangles.push_back(cv::Rect(l_up_rectangles[i]));
+		}
+		size = l_down_rectangles.size();
+		for (int i = 0; i < size; i++)
+		{
+			l_down_rectangles.push_back(cv::Rect(l_down_rectangles[i]));
+		}
+
+		cv::groupRectangles(l_right_rectangles, 1, 0.2);
+		cv::groupRectangles(l_up_rectangles, 1, 0.2);
+		cv::groupRectangles(l_left_rectangles, 1, 0.2);
+		cv::groupRectangles(l_down_rectangles, 1, 0.2);
+
+
+		for (size_t i = 0; i <= l_right_rectangles.size() ; i++)
+		{
+			cv::rectangle(l_aux2, l_right_rectangles[i], colors[RED]);
+		}
+		for (size_t i = 0; i <= l_up_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux2, l_up_rectangles[i], colors[ORANGE]);
+		}
+		for (size_t i = 0; i <= l_left_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux2, l_left_rectangles[i], colors[YELLOW]);
+		}
+		for (size_t i = 0; i <= l_down_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux2, l_down_rectangles[i], colors[GREEN]);
+		}
+
 		// Text info
-		cv::putText(l_painted_svm_img, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
-		cv::putText(l_painted_svm_img, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
-		cv::putText(l_painted_svm_img, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
-		cv::putText(l_painted_svm_img, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
+		cv::putText(l_aux2, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
+		cv::putText(l_aux2, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
+		cv::putText(l_aux2, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
+		cv::putText(l_aux2, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
 
 		cv::putText(l_painted_boost_img, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
 		cv::putText(l_painted_boost_img, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
 		cv::putText(l_painted_boost_img, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
 		cv::putText(l_painted_boost_img, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
 
+		cv::imshow("Correcting overlapping2", l_aux2);
 		cv::imshow("Boost Results", l_painted_boost_img);
-		cv::imshow("SVM Results", l_painted_svm_img);
+		//cv::imshow("SVM Results", l_painted_svm_img);
 		cv::waitKey(0);
+
+		//Clear variables
+		l_right_rectangles.clear();
+		l_up_rectangles.clear();
+		l_down_rectangles.clear();
+		l_left_rectangles.clear();
 
 		#ifdef TIME_PROCESS
 			//Obtaining time of process
