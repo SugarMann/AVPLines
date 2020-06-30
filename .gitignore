@@ -92,6 +92,7 @@ StyleCopReport.xml
 *.pidb
 *.svclog
 *.scc
+*.vcxproj
 
 # Chutzpah Test files
 _Chutzpah*
@@ -352,3 +353,4 @@ MigrationBackup/
 #Resources folder (training set of positive and negative samples)
 resources/
 resources.zip
+AVPLines_project/AVPLines_project.vcxproj
