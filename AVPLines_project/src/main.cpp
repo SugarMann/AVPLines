@@ -13,11 +13,14 @@
 
 #define PI 3.14159265
 
+//Define reading video
+#define READ_VIDEO
+
+//Define reading images
+//#define READ_IMAGES
+
 //Define to write the markpoint dataset
 //#define MAKE_TRAINING_SET
-
-//Define to trace debug
-#define DEBUG_LABEL_TRACE
 
 //Define to extract features
 //#define EXTRACT_FEATURES
@@ -31,6 +34,12 @@
 //Define to trace times of processing
 #define TIME_PROCESS
 
+//Define to trace debug
+#define DEBUG_VISUAL_TRACE
+
+//Define shell trace
+#define DEBUG_PROMPT_TRACE
+
 // Some colors to draw with
 enum { RED, ORANGE, YELLOW, GREEN };
 static cv::Scalar colors[] =
@@ -42,8 +51,10 @@ static cv::Scalar colors[] =
 };
 
 //Global variables
-int m_number_detectors = 3; //nº of detectors - 1
-float m_confidence = 0.5f;
+int m_number_detectors = 3; //nº of detectors - 1 (minus one)
+int m_number_divisions = 6; //nº of division to process in the image
+float m_group_rectangles_scale = 0.2;
+//float m_confidence = 0.5f;
 bool hogs_sel = true;
 float m_max_dist_slot_short = 190;
 float m_min_dist_slot_short = 135;
@@ -179,7 +190,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 			//Image to grayscale
 			cv::cvtColor(l_mark_point.getImage(), l_mat, cv::COLOR_RGB2GRAY);
 
-			#ifdef DEBUG_LABEL_TRACE
+			#ifdef DEBUG_VISUAL_TRACE
 			cv::imshow( "Gray image", l_mat );
 			cv::waitKey(0);
 			#endif // DEBUG_LABEL_TRACE
@@ -187,7 +198,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 			//Another way to remove noise
 			cv::GaussianBlur(l_mat, l_mat, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
 			
-			#ifdef DEBUG_LABEL_TRACE
+			#ifdef DEBUG_VISUAL_TRACE
 			cv::imshow("Cleaned image", l_mat);
 			cv::waitKey(0);
 			#endif // DEBUG_LABEL_TRACE
@@ -195,7 +206,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 			//Stretch the grayscale histogram
 			stretchHistogram(l_mat);
 
-			#ifdef DEBUG_LABEL_TRACE
+			#ifdef DEBUG_VISUAL_TRACE
 			cv::imshow( "Stretched gray image", l_mat );
 			cv::waitKey(0);
 			#endif // DEBUG_LABEL_TRACE
@@ -244,7 +255,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 		//Image to grayscale
 		cv::cvtColor(l_negative_img, l_negative_img, cv::COLOR_RGB2GRAY);
 
-	#ifdef DEBUG_LABEL_TRACE
+	#ifdef DEBUG_VISUAL_TRACE
 		cv::imshow("Gray image", l_negative_img);
 		cv::waitKey(0);
 	#endif // DEBUG_LABEL_TRACE
@@ -255,7 +266,7 @@ void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_b
 		//Stretch the grayscale histogram
 		stretchHistogram(l_negative_img);
 
-	#ifdef DEBUG_LABEL_TRACE
+	#ifdef DEBUG_VISUAL_TRACE
 		cv::imshow("Stretched gray image", l_negative_img);
 		cv::waitKey(0);
 	#endif // DEBUG_LABEL_TRACE
@@ -598,10 +609,17 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 	std::cout << "---------------------------------------------------------" << std::endl;
 	std::cout << "--> Test step:" << std::endl;
 
+	#ifdef READ_VIDEO
+	//Reading video
+	cv::VideoCapture cap(f_file_object.getPath() + "\\..\\TestSet\\ForMarkingPoints\\folder\\output.mp4");
+	#endif // READ_VIDEO
+
+	#ifdef READ_IMAGES
 	//Make a list of images for test
-	l_file_object.setPath(f_file_object.getPath() + "\\..\\TestSet\\ForMarkingPoints"); //\\positive_samples
+	l_file_object.setPath(f_file_object.getPath() + "\\..\\TestSet\\ForMarkingPoints"); // Training path -> \\positive_samples
 	l_file_object.fileNamesByExtension("bmp", l_file_names);
 	l_file_object.readBmp(l_file_names, l_image_list);
+	#endif // READ_IMAGES
 
 	//Read and load ML boost models
 	for (uint8_t i = 0; i <= m_number_detectors; i++)
@@ -615,8 +633,24 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 	//	l_svm_detectors.push_back(cv::ml::StatModel::load<cv::ml::SVM>(f_model_path + "\\resources\\SVM_MarkPoint_Model_" + std::to_string(i) + ".yml"));
 	//}
 
+	#ifdef READ_VIDEO
+	// Check if video opened successfully
+	if (!cap.isOpened())
+	{
+		std::cout << "Error opening video stream or file" << std::endl;
+		return;
+	}
+	while (1) 
+	{
+		cv::Mat l_image;
+		// Capture frame-by-frame
+		cap >> l_image;
+	#endif // READ_VIDEO
+
+	#ifdef READ_IMAGES
 	for (cv::Mat l_image : l_image_list)
 	{
+	#endif // READ_IMAGES
 
 		#ifdef TIME_PROCESS
 		//Process time counter initialize
@@ -624,11 +658,8 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		l_time1 = cv::getTickCount();
 		#endif	// TIME_PROCESS
 
-		//Show original image
-		//cv::imshow("Original Image", l_image);
-		//cv::waitKey(0);
 		l_image.copyTo( l_painted_boost_img );
-		l_image.copyTo(l_painted_svm_img);
+		//l_image.copyTo(l_painted_svm_img);
 		l_image.copyTo(l_aux);
 		l_image.copyTo(l_aux_lines);
 
@@ -640,9 +671,9 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		}
 
 		//Create grid over the original image to get the differents square pieces for process and predict
-		for (uint16_t y = 0; y < l_image.rows; y += f_height/6)
+		for (uint16_t y = 0; y < l_image.rows; y += f_height/m_number_divisions)
 		{
-			for (uint16_t x = 0; x < l_image.cols; x += f_width/6)
+			for (uint16_t x = 0; x < l_image.cols; x += f_width/ m_number_divisions)
 			{
 				//Size restriction
 				if ( x + f_width > l_image.cols || y + f_height > l_image.rows )
@@ -686,8 +717,26 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 				//cv::imshow("Filtering noise", l_crop_image);
 				//cv::waitKey(0);
 
+//#ifdef TIME_PROCESS
+////Process time counter initialize
+//				int64_t l_time3, l_time4;
+//				l_time3 = cv::getTickCount();
+//#endif	// TIME_PROCESS
+
 				//Improve contrast stretching grayscale histogram
 				stretchHistogram(l_crop_image);
+
+//#ifdef TIME_PROCESS
+//				//Obtaining time of process
+//				l_time4 = cv::getTickCount();
+//				l_time4 = l_time3 - l_time4;
+//				//Convert to miliseconds
+//				l_time4 = 1000 * l_time4 / cv::getTickFrequency();
+//				l_time3 = 1000 * l_time4;
+//
+//				std::cout << "---------------------------------------------------------" << std::endl;
+//				std::cout << "\n\n--> Strecht time:" << l_time4 << " ms" << std::endl;
+//#endif // TIME_PROCESS
 
 				//cv::imshow("Stretched histogram Image", l_crop_image);
 				//cv::waitKey(0);
@@ -757,22 +806,34 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 						switch (i)
 						{
 						case 0:
+							#ifdef DEBUG_VISUAL_TRACE
 							cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
+							#endif // DEBUG_VISUAL_TRACE
+
 							//Store rectangles to correct overlapping
 							l_right_rectangles.push_back(l_rect);
 							break;
 						case 1:
+							#ifdef DEBUG_VISUAL_TRACE
 							cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
+							#endif // DEBUG_VISUAL_TRACE
+
 							//Store rectangles to correct overlapping
 							l_up_rectangles.push_back(l_rect);
 							break;
 						case 2:
+							#ifdef DEBUG_VISUAL_TRACE
 							cv::rectangle(l_painted_boost_img, l_rect, colors[YELLOW]);
+							#endif // DEBUG_VISUAL_TRACE
+
 							//Store rectangles to correct overlapping
 							l_left_rectangles.push_back(l_rect);
 							break;
 						case 3:
+							#ifdef DEBUG_VISUAL_TRACE
 							cv::rectangle(l_painted_boost_img, l_rect, colors[GREEN]);
+							#endif // DEBUG_VISUAL_TRACE
+
 							//Store rectangles to correct overlapping
 							l_down_rectangles.push_back(l_rect);
 							break;
@@ -793,10 +854,10 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		}
 
 		//Correct overlap in detections
-		cv::groupRectangles(l_right_rectangles, 2, 0.2);
-		cv::groupRectangles(l_up_rectangles, 2, 0.2);
-		cv::groupRectangles(l_left_rectangles, 2, 0.2);
-		cv::groupRectangles(l_down_rectangles, 2, 0.2); 
+		cv::groupRectangles ( l_right_rectangles, 2, m_group_rectangles_scale );
+		cv::groupRectangles ( l_up_rectangles, 2, m_group_rectangles_scale );
+		cv::groupRectangles ( l_left_rectangles, 2, m_group_rectangles_scale );
+		cv::groupRectangles ( l_down_rectangles, 2, m_group_rectangles_scale );
 
 		int size = l_right_rectangles.size();
 		for(int i = 0; i < size; i++)
@@ -824,7 +885,7 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		cv::groupRectangles(l_left_rectangles, 1, 0.2);
 		cv::groupRectangles(l_down_rectangles, 1, 0.2);
 
-        #ifdef DEBUG_LABEL_TRACE
+        
 		for (size_t i = 0; i < l_right_rectangles.size() ; i++)
 		{
 			cv::rectangle(l_aux, l_right_rectangles[i], colors[RED]);
@@ -842,21 +903,17 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 			cv::rectangle(l_aux, l_down_rectangles[i], colors[GREEN]);
 		}
 
+		#ifdef DEBUG_VISUAL_TRACE
 		//Text info
 		cv::putText(l_aux, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
 		cv::putText(l_aux, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
 		cv::putText(l_aux, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
 		cv::putText(l_aux, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
 
-		cv::putText(l_painted_boost_img, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
-		cv::putText(l_painted_boost_img, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
-		cv::putText(l_painted_boost_img, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
-		cv::putText(l_painted_boost_img, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
-
 		cv::imshow("Boost Results with overlapping corrected", l_aux);
 		//cv::imshow("Boost Results", l_painted_boost_img);
 		//cv::imshow("SVM Results", l_painted_svm_img);
-		cv::waitKey(20);
+		cv::waitKey(10);
         #endif
 
 		//Slot inference
@@ -877,7 +934,7 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 			l_time1 = 1000 * l_time2;
 
 			std::cout << "---------------------------------------------------------" << std::endl;
-			std::cout << "\n\n--> Time of process:" << l_time2 << " ms" << std::endl;
+			std::cout << "\n\n--> Total process time:" << l_time2 << " ms" << std::endl;
 		#endif // TIME_PROCESS
 
 	}
@@ -902,8 +959,11 @@ float distanceSample(cv::Mat& f_sample, const cv::Ptr <cv::ml::SVM>& f_svm)
 void slotInference(std::list <CSlot>& f_slot_list, std::vector <cv::Rect>& f_right_rectangles, std::vector <cv::Rect>& f_up_rectangles,
 	std::vector <cv::Rect>& f_left_rectangles, std::vector <cv::Rect>& f_down_rectangles, cv::Mat& f_image) 
 {
-	//Local variables
-
+	#ifdef TIME_PROCESS
+	//Process time counter initialize
+	int64_t l_time11, l_time22;
+	l_time11 = cv::getTickCount();
+	#endif	// TIME_PROCESS
 
 	//Make a copy of input image
 	cv::Mat l_image;
@@ -916,8 +976,30 @@ void slotInference(std::list <CSlot>& f_slot_list, std::vector <cv::Rect>& f_rig
 	correctAndDrawDownSlots  ( f_down_rectangles, f_image, f_slot_list );
 
 	//Visualize slots detected
-	cv::imshow("Slots Inference", f_image);
-	cv::waitKey(0);
+	#ifdef DEBUG_VISUAL_TRACE
+		#ifdef READ_VIDEO
+		cv::imshow("Slots Inference", f_image);
+		cv::waitKey(10);
+		#endif // READ_VIDEO
+		#ifdef READ_IMAGES
+		cv::imshow("Slots Inference", f_image);
+		cv::waitKey(0);
+		#endif // READ_IMAGES
+	#endif // DEBUG_LEVEL_TRACE
+
+	#ifdef TIME_PROCESS
+		//Obtaining time of process
+		l_time22 = cv::getTickCount();
+		l_time22 = l_time22 - l_time11;
+		//Convert to miliseconds
+		l_time22 = 1000 * l_time22 / cv::getTickFrequency();
+		l_time11 = 1000 * l_time22;
+
+		std::cout << "---------------------------------------------------------" << std::endl;
+		std::cout << "\n\n--> Process time of Slot Inference:" << l_time22 << " ms" << std::endl;
+	#endif // TIME_PROCESS
+
+	
 }
 
 void correctAndDrawLeftSlots ( const std::vector <cv::Rect>& f_left_rectangles, cv::Mat& f_image, std::list <CSlot>& f_slot_list )
@@ -1062,12 +1144,15 @@ void correctAndDrawLeftSlots ( const std::vector <cv::Rect>& f_left_rectangles, 
 
 	for (CSlot l_slot_object : l_slot_candidates_list)
 	{
-#ifdef DEBUG_LABEL_TRACE
+
+		#ifdef DEBUG_VISUAL_TRACE
 		//Draw slots candidates
 		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint2(), colors[YELLOW], 2);
 		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint3(), colors[YELLOW], 2);
 		cv::line(f_image, l_slot_object.getPoint2(), l_slot_object.getPoint4(), colors[YELLOW], 2);
-
+		#endif // DEBUG_VISUAL_TRACE
+	
+		#ifdef DEBUG_PROMPT_TRACE
 		//Console debug
 		std::cout << "---------------" << std::endl;
 		std::cout << "Slot Point with ID -> " << std::to_string(l_slot_object.getId()) << ":\n\n" << std::endl;
@@ -1075,7 +1160,7 @@ void correctAndDrawLeftSlots ( const std::vector <cv::Rect>& f_left_rectangles, 
 		std::cout << "Point 2: " << l_slot_object.getPoint2() << "\n" << std::endl;
 		std::cout << "Point 3: " << l_slot_object.getPoint3() << "\n" << std::endl;
 		std::cout << "Point 4: " << l_slot_object.getPoint4() << "\n" << std::endl;
-#endif
+		#endif
 
 		//Save slot candidate in function list
 		f_slot_list.push_back(l_slot_object);
@@ -1224,12 +1309,14 @@ void correctAndDrawRightSlots(const std::vector <cv::Rect>& f_right_rectangles, 
 
 	for (CSlot l_slot_object : l_slot_candidates_list)
 	{
-#ifdef DEBUG_LABEL_TRACE
+		#ifdef DEBUG_VISUAL_TRACE
 		//Draw slots candidates
 		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint2(), colors[RED], 2);
 		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint3(), colors[RED], 2);
 		cv::line(f_image, l_slot_object.getPoint2(), l_slot_object.getPoint4(), colors[RED], 2);
+		#endif // DEBUG_VISUAL_TRACE
 
+		#ifdef DEBUG_PROMPT_TRACE
 		//Console debug
 		std::cout << "---------------" << std::endl;
 		std::cout << "Slot Point with ID -> " << std::to_string(l_slot_object.getId()) << ":\n\n" << std::endl;
@@ -1237,7 +1324,7 @@ void correctAndDrawRightSlots(const std::vector <cv::Rect>& f_right_rectangles, 
 		std::cout << "Point 2: " << l_slot_object.getPoint2() << "\n" << std::endl;
 		std::cout << "Point 3: " << l_slot_object.getPoint3() << "\n" << std::endl;
 		std::cout << "Point 4: " << l_slot_object.getPoint4() << "\n" << std::endl;
-#endif
+		#endif
 
 		//Save slot candidate in function list
 		f_slot_list.push_back(l_slot_object);
@@ -1394,12 +1481,14 @@ void correctAndDrawDownSlots(const std::vector <cv::Rect>& f_down_rectangles, cv
 
 	for (CSlot l_slot_object : l_slot_candidates_list)
 	{
-#ifdef DEBUG_LABEL_TRACE
+		#ifdef DEBUG_VISUAL_TRACE
 		//Draw slots candidates
 		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint2(), colors[GREEN], 2);
 		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint3(), colors[GREEN], 2);
 		cv::line(f_image, l_slot_object.getPoint2(), l_slot_object.getPoint4(), colors[GREEN], 2);
+		#endif // DEBUG_VISUAL_TRACE
 
+		#ifdef DEBUG_PROMPT_TRACE
 		//Console debug
 		std::cout << "---------------" << std::endl;
 		std::cout << "Slot Point with ID -> " << std::to_string(l_slot_object.getId()) << ":\n\n" << std::endl;
@@ -1407,7 +1496,7 @@ void correctAndDrawDownSlots(const std::vector <cv::Rect>& f_down_rectangles, cv
 		std::cout << "Point 2: " << l_slot_object.getPoint2() << "\n" << std::endl;
 		std::cout << "Point 3: " << l_slot_object.getPoint3() << "\n" << std::endl;
 		std::cout << "Point 4: " << l_slot_object.getPoint4() << "\n" << std::endl;
-#endif
+		#endif
 
 		//Save slot candidate in function list
 		f_slot_list.push_back(l_slot_object);
@@ -1564,12 +1653,14 @@ void correctAndDrawUpSlots(const std::vector <cv::Rect>& f_up_rectangles, cv::Ma
 
 	for (CSlot l_slot_object : l_slot_candidates_list)
 	{
-#ifdef DEBUG_LABEL_TRACE
+		#ifdef DEBUG_VISUAL_TRACE
 		//Draw slots candidates
 		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint2(), colors[ORANGE], 2);
 		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint3(), colors[ORANGE], 2);
 		cv::line(f_image, l_slot_object.getPoint2(), l_slot_object.getPoint4(), colors[ORANGE], 2);
+		#endif // DEBUG_VISUAL_TRACE
 
+		#ifdef DEBUG_PROMPT_TRACE
 		//Console debug
 		std::cout << "---------------" << std::endl;
 		std::cout << "Slot Point with ID -> " << std::to_string(l_slot_object.getId()) << ":\n\n" << std::endl;
@@ -1577,7 +1668,7 @@ void correctAndDrawUpSlots(const std::vector <cv::Rect>& f_up_rectangles, cv::Ma
 		std::cout << "Point 2: " << l_slot_object.getPoint2() << "\n" << std::endl;
 		std::cout << "Point 3: " << l_slot_object.getPoint3() << "\n" << std::endl;
 		std::cout << "Point 4: " << l_slot_object.getPoint4() << "\n" << std::endl;
-#endif
+		#endif
 
 		//Save slot candidate in function list
 		f_slot_list.push_back(l_slot_object);
