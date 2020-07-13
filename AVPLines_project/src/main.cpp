@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <vector>
+#include <math.h>
 
 #include <main.hpp>
 
@@ -10,11 +11,13 @@
 #include <opencv2/objdetect.hpp>
 #include <opencv2/ml.hpp>
 
+#define PI 3.14159265
+
 //Define to write the markpoint dataset
 //#define MAKE_TRAINING_SET
 
 //Define to trace debug
-//#define DEBUG_LABEL_TRACE
+#define DEBUG_LABEL_TRACE
 
 //Define to extract features
 //#define EXTRACT_FEATURES
@@ -42,6 +45,11 @@ static cv::Scalar colors[] =
 int m_number_detectors = 3; //nº of detectors - 1
 float m_confidence = 0.5f;
 bool hogs_sel = true;
+float m_max_dist_slot_short = 190;
+float m_min_dist_slot_short = 135;
+float m_max_dist_slot_long = 395;
+float m_min_dist_slot_long = 305;
+int16_t m_max_slot_overlap = 20;
 
 int main( int argc, const char* argv[] )
 {
@@ -132,8 +140,8 @@ void writePositiveTrainingSet( std::vector< std::string >& f_file_json_names, st
 	//Make the training set images with MarkPoint list information
 	l_file_object.makePositiveTrainingSet(f_mark_point_list, f_width, f_height );
 }
-//---------------------------------------------------------
 
+//---------------------------------------------------------
 // Extract features module
 //---------------------------------------------------------
 void featuresExtractor( CFile& f_file_object, std::vector<std::string>& f_file_bmp_names,
@@ -424,6 +432,7 @@ void convertToML( const std::vector<cv::Mat>& f_train_samples, cv::Mat& f_trainD
 		}
 	}
 }
+
 //---------------------------------------------------------
 // Training detectors module
 //---------------------------------------------------------
@@ -564,8 +573,8 @@ void trainDetectors( CFile& f_file_object, const std::string& f_model_path )
 
 
 }
-//---------------------------------------------------------
 
+//---------------------------------------------------------
 // Predict module
 //---------------------------------------------------------
 void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8_t f_width, uint8_t f_height )
@@ -576,7 +585,7 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 	CFile l_file_object;
 	std::list< cv::Mat > l_image_list;
 	std::vector< std::string > l_file_names;
-	cv::Mat l_crop_image, l_painted_boost_img, l_painted_svm_img, l_aux, l_aux2;
+	cv::Mat l_crop_image, l_painted_boost_img, l_painted_svm_img, l_aux, l_aux_lines;
 	std::vector < cv::Mat > l_gradient;
 	std::vector < float > l_boost_responses, l_svm_responses;
 	cv::Rect2d l_rect_selected;
@@ -584,6 +593,7 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 	float l_distance;
 	std::vector < float > l_confidence_vector;
 	std::vector < cv::Rect > l_up_rectangles, l_down_rectangles, l_right_rectangles, l_left_rectangles;
+	std::list <CSlot> l_slot_list;
 
 	std::cout << "---------------------------------------------------------" << std::endl;
 	std::cout << "--> Test step:" << std::endl;
@@ -620,7 +630,7 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		l_image.copyTo( l_painted_boost_img );
 		l_image.copyTo(l_painted_svm_img);
 		l_image.copyTo(l_aux);
-		l_image.copyTo(l_aux2);
+		l_image.copyTo(l_aux_lines);
 
 		//Select the roi that we don't need to process ( black box car in surround images )
 		if ( !l_is_roi_selected)
@@ -787,25 +797,6 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		cv::groupRectangles(l_up_rectangles, 2, 0.2);
 		cv::groupRectangles(l_left_rectangles, 2, 0.2);
 		cv::groupRectangles(l_down_rectangles, 2, 0.2); 
-		
-		for (size_t i = 0; i <= l_right_rectangles.size(); i++)
-		{
-			cv::rectangle(l_aux, l_right_rectangles[i], colors[RED]);
-		}
-		for (size_t i = 0; i <= l_up_rectangles.size(); i++)
-		{
-			cv::rectangle(l_aux, l_up_rectangles[i], colors[ORANGE]);
-		}
-		for (size_t i = 0; i <= l_left_rectangles.size(); i++)
-		{
-			cv::rectangle(l_aux, l_left_rectangles[i], colors[YELLOW]);
-		}
-		for (size_t i = 0; i <= l_down_rectangles.size(); i++)
-		{
-			cv::rectangle(l_aux, l_down_rectangles[i], colors[GREEN]);
-		}
-
-		cv::imshow("Correcting overlapping", l_aux);
 
 		int size = l_right_rectangles.size();
 		for(int i = 0; i < size; i++)
@@ -833,39 +824,43 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 		cv::groupRectangles(l_left_rectangles, 1, 0.2);
 		cv::groupRectangles(l_down_rectangles, 1, 0.2);
 
+        #ifdef DEBUG_LABEL_TRACE
+		for (size_t i = 0; i < l_right_rectangles.size() ; i++)
+		{
+			cv::rectangle(l_aux, l_right_rectangles[i], colors[RED]);
+		}
+		for (size_t i = 0; i < l_up_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux, l_up_rectangles[i], colors[ORANGE]);
+		}
+		for (size_t i = 0; i < l_left_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux, l_left_rectangles[i], colors[YELLOW]);
+		}
+		for (size_t i = 0; i < l_down_rectangles.size(); i++)
+		{
+			cv::rectangle(l_aux, l_down_rectangles[i], colors[GREEN]);
+		}
 
-		for (size_t i = 0; i <= l_right_rectangles.size() ; i++)
-		{
-			cv::rectangle(l_aux2, l_right_rectangles[i], colors[RED]);
-		}
-		for (size_t i = 0; i <= l_up_rectangles.size(); i++)
-		{
-			cv::rectangle(l_aux2, l_up_rectangles[i], colors[ORANGE]);
-		}
-		for (size_t i = 0; i <= l_left_rectangles.size(); i++)
-		{
-			cv::rectangle(l_aux2, l_left_rectangles[i], colors[YELLOW]);
-		}
-		for (size_t i = 0; i <= l_down_rectangles.size(); i++)
-		{
-			cv::rectangle(l_aux2, l_down_rectangles[i], colors[GREEN]);
-		}
-
-		// Text info
-		cv::putText(l_aux2, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
-		cv::putText(l_aux2, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
-		cv::putText(l_aux2, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
-		cv::putText(l_aux2, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
+		//Text info
+		cv::putText(l_aux, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
+		cv::putText(l_aux, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
+		cv::putText(l_aux, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
+		cv::putText(l_aux, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
 
 		cv::putText(l_painted_boost_img, "RED -> Right", cv::Point2d(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[RED], 1, cv::LINE_AA);
 		cv::putText(l_painted_boost_img, "ORANGE -> Up", cv::Point2d(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[ORANGE], 1, cv::LINE_AA);
 		cv::putText(l_painted_boost_img, "YELLOW -> Left", cv::Point2d(10, 60), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[YELLOW], 1, cv::LINE_AA);
 		cv::putText(l_painted_boost_img, "GREEN -> Down", cv::Point2d(10, 80), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.75, colors[GREEN], 1, cv::LINE_AA);
 
-		cv::imshow("Correcting overlapping2", l_aux2);
-		cv::imshow("Boost Results", l_painted_boost_img);
+		cv::imshow("Boost Results with overlapping corrected", l_aux);
+		//cv::imshow("Boost Results", l_painted_boost_img);
 		//cv::imshow("SVM Results", l_painted_svm_img);
-		cv::waitKey(0);
+		cv::waitKey(20);
+        #endif
+
+		//Slot inference
+		slotInference(l_slot_list, l_right_rectangles, l_up_rectangles, l_left_rectangles, l_down_rectangles, l_aux_lines);
 
 		//Clear variables
 		l_right_rectangles.clear();
@@ -888,17 +883,6 @@ void predictImages( const std::string& f_model_path, CFile& f_file_object, uint8
 	}
 }
 
-float distanceSample(cv::Mat& f_sample, const cv::Ptr <cv::ml::Boost>& f_boost)
-{
-	//Variables
-	cv::Mat l_result;
-	float l_distance;
-
-	f_boost->predict(f_sample, l_result, cv::ml::StatModel::Flags::RAW_OUTPUT);
-	l_distance = l_result.at<float>(0, 0);
-	return l_distance;
-}
-
 float distanceSample(cv::Mat& f_sample, const cv::Ptr <cv::ml::SVM>& f_svm)
 {
 	//Variables
@@ -909,4 +893,725 @@ float distanceSample(cv::Mat& f_sample, const cv::Ptr <cv::ml::SVM>& f_svm)
 	l_distance = l_result.at<float>(0, 0);
 	return l_distance;
 }
+
+//---------------------------------------------------------
+// Slot Inference
+// This function detect slots, then visualize and save them in a list
+// output: List with slots detected
+//---------------------------------------------------------
+void slotInference(std::list <CSlot>& f_slot_list, std::vector <cv::Rect>& f_right_rectangles, std::vector <cv::Rect>& f_up_rectangles,
+	std::vector <cv::Rect>& f_left_rectangles, std::vector <cv::Rect>& f_down_rectangles, cv::Mat& f_image) 
+{
+	//Local variables
+
+
+	//Make a copy of input image
+	cv::Mat l_image;
+	f_image.copyTo(l_image);
+
+	//Correct and draw every slot with all orientations
+	correctAndDrawLeftSlots	 ( f_left_rectangles, f_image, f_slot_list );
+	correctAndDrawRightSlots ( f_right_rectangles, f_image, f_slot_list );
+	correctAndDrawUpSlots	 ( f_up_rectangles, f_image, f_slot_list );
+	correctAndDrawDownSlots  ( f_down_rectangles, f_image, f_slot_list );
+
+	//Visualize slots detected
+	cv::imshow("Slots Inference", f_image);
+	cv::waitKey(0);
+}
+
+void correctAndDrawLeftSlots ( const std::vector <cv::Rect>& f_left_rectangles, cv::Mat& f_image, std::list <CSlot>& f_slot_list )
+{
+	//Variable
+	cv::Point2i l_point_1, l_point_2, l_point_3, l_point_4, l_point_max, l_point_min;
+	float l_distance_p1_p2, l_distance_pmax_pmid, l_distance_pmin_pmid;
+	float l_perpendicular_slope;
+	float l_angle;
+	int8_t l_id = 0;
+	cv::Point2f l_mid_point;
+	CSlot l_slot;
+	std::list <CSlot> l_slot_list;
+
+	//Loop between every pair of LEFT rectangles
+	for (size_t i = 0; i < f_left_rectangles.size(); i++)
+	{
+		for (size_t j = 0; j < f_left_rectangles.size(); j++)
+		{
+			if (i == j || j < i)
+				continue;
+
+			//Calculate mass center in each rectangle
+			l_point_1.x = f_left_rectangles[i].x + f_left_rectangles[i].width / 2;
+			l_point_1.y = f_left_rectangles[i].y + f_left_rectangles[i].height / 2;
+			l_point_2.x = f_left_rectangles[j].x + f_left_rectangles[j].width / 2;
+			l_point_2.y = f_left_rectangles[j].y + f_left_rectangles[j].height / 2;
+
+			//Calculate distance between points
+			l_distance_p1_p2 = std::pow(l_point_2.x - l_point_1.x, 2) + std::pow(l_point_2.y - l_point_1.y, 2);
+			l_distance_p1_p2 = std::sqrt(l_distance_p1_p2);
+
+			//Slot compare
+			if (l_distance_p1_p2 < m_max_dist_slot_short && l_distance_p1_p2 > m_min_dist_slot_short
+				|| l_distance_p1_p2 < m_max_dist_slot_long && l_distance_p1_p2 > m_min_dist_slot_long)
+			{
+				//Perpendicular slope calculation
+				l_perpendicular_slope = static_cast <float> ((l_point_2.x - l_point_1.x)) /
+					static_cast <float> ((l_point_2.y - l_point_1.y));
+
+				//Middle point between point_1 and point_2
+				l_mid_point.x = (static_cast <float> (l_point_1.x) + static_cast <float> (l_point_2.x)) / 2.0f;
+				l_mid_point.y = (static_cast <float> (l_point_1.y) + static_cast <float> (l_point_2.y)) / 2.0f;
+
+				//Solve perpendicular lines
+				if (std::abs(l_point_1.x - l_point_2.x) < std::abs(l_point_1.y - l_point_2.y)) //then perpendicular variance in x
+				{
+					l_point_max.y = -((l_perpendicular_slope * (f_image.cols - l_mid_point.x)) - l_mid_point.y);
+					l_point_max.x = f_image.cols;
+
+					l_point_min.y = -((l_perpendicular_slope * (0 - l_mid_point.x)) - l_mid_point.y);
+					l_point_min.x = 0;
+
+					//Solve polygon point to slot
+					l_point_3.x = 0;
+					l_point_3.y = l_point_min.y - (l_mid_point.y - l_point_1.y);
+					l_point_4.x = 0;
+					l_point_4.y = l_point_min.y + (l_point_2.y - l_mid_point.y);
+				}
+				else { //then perpendicular variance in y so, it´s not left slot
+					continue;
+				}
+
+				//Calculate distance between generated points and the middle point
+				l_distance_pmax_pmid = std::pow(l_point_max.x - l_mid_point.x, 2) + std::pow(l_point_max.y - l_mid_point.y, 2);
+				l_distance_pmax_pmid = std::sqrt(l_distance_pmax_pmid);
+				l_distance_pmin_pmid = std::pow(l_point_min.x - l_mid_point.x, 2) + std::pow(l_point_min.y - l_mid_point.y, 2);
+				l_distance_pmin_pmid = std::sqrt(l_distance_pmin_pmid);
+
+				//Distance restriction
+				if (l_distance_pmax_pmid < l_distance_pmin_pmid)
+				{
+					continue;
+				}
+				else {
+					l_angle = angleOf(l_mid_point, l_point_max);
+
+					//Compare angles restrictions
+					if (l_angle < 45.0 || l_angle > 315.0) //then we have a slot candidate
+					{
+						l_slot.setHeading(l_angle);
+						l_id++; //Increase ID
+						l_slot.setId(l_id);
+						l_slot.setWidth(l_distance_p1_p2);
+						l_slot.setPoint1(cv::Point2i(l_point_1.x, l_point_1.y));
+						l_slot.setPoint2(cv::Point2i(l_point_2.x, l_point_2.y));
+						l_slot.setPoint3(cv::Point2i(l_point_3.x, l_point_3.y));
+						l_slot.setPoint4(cv::Point2i(l_point_4.x, l_point_4.y));
+						l_slot.setOrientation("left");
+
+						//Save slot candidate
+						l_slot_list.push_back(l_slot);
+					}
+				}
+			}
+		}
+	}
+
+	std::list < CSlot > l_slot_candidates_list;
+	bool l_not_candidate = false;
+
+	//Correct slot overlapping
+	for (CSlot l_slot_object1 : l_slot_list)
+	{
+		for (CSlot l_slot_object2 : l_slot_list)
+		{
+
+			if (l_slot_object1.getId() == l_slot_object2.getId())
+			{
+				continue;
+			}
+
+			else if (l_slot_object2.getPoint1().y > l_slot_object1.getPoint1().y&&
+				l_slot_object2.getPoint1().y < l_slot_object1.getPoint2().y)
+			{
+				l_not_candidate = true;
+				continue;
+			}
+
+			else if (l_slot_object2.getPoint2().y > l_slot_object1.getPoint1().y&&
+				l_slot_object2.getPoint2().y < l_slot_object1.getPoint2().y)
+			{
+				l_not_candidate = true;
+				continue;
+			}
+
+		}
+
+		if (l_not_candidate)
+		{
+			//Update boolean
+			l_not_candidate = false;
+			continue;
+		}
+		else
+		{
+			l_slot_candidates_list.push_back(l_slot_object1);
+			//Update boolean
+			l_not_candidate = false;
+		}
+	}
+
+	for (CSlot l_slot_object : l_slot_candidates_list)
+	{
+#ifdef DEBUG_LABEL_TRACE
+		//Draw slots candidates
+		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint2(), colors[YELLOW], 2);
+		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint3(), colors[YELLOW], 2);
+		cv::line(f_image, l_slot_object.getPoint2(), l_slot_object.getPoint4(), colors[YELLOW], 2);
+
+		//Console debug
+		std::cout << "---------------" << std::endl;
+		std::cout << "Slot Point with ID -> " << std::to_string(l_slot_object.getId()) << ":\n\n" << std::endl;
+		std::cout << "Point 1: " << l_slot_object.getPoint1() << "\n" << std::endl;
+		std::cout << "Point 2: " << l_slot_object.getPoint2() << "\n" << std::endl;
+		std::cout << "Point 3: " << l_slot_object.getPoint3() << "\n" << std::endl;
+		std::cout << "Point 4: " << l_slot_object.getPoint4() << "\n" << std::endl;
+#endif
+
+		//Save slot candidate in function list
+		f_slot_list.push_back(l_slot_object);
+	}
+}
+
+void correctAndDrawRightSlots(const std::vector <cv::Rect>& f_right_rectangles, cv::Mat& f_image, std::list <CSlot>& f_slot_list)
+{
+	//Variable
+	cv::Point2i l_point_1, l_point_2, l_point_3, l_point_4, l_point_max, l_point_min;
+	float l_distance_p1_p2, l_distance_pmax_pmid, l_distance_pmin_pmid;
+	float l_perpendicular_slope;
+	float l_angle;
+	int8_t l_id = 0;
+	cv::Point2f l_mid_point;
+	CSlot l_slot;
+	std::list <CSlot> l_slot_list;
+
+	//Loop between every pair of LEFT rectangles
+	for (size_t i = 0; i < f_right_rectangles.size(); i++)
+	{
+		for (size_t j = 0; j < f_right_rectangles.size(); j++)
+		{
+			if (i == j || j < i)
+				continue;
+
+			//Calculate mass center in each rectangle
+			l_point_1.x = f_right_rectangles[i].x + f_right_rectangles[i].width / 2;
+			l_point_1.y = f_right_rectangles[i].y + f_right_rectangles[i].height / 2;
+			l_point_2.x = f_right_rectangles[j].x + f_right_rectangles[j].width / 2;
+			l_point_2.y = f_right_rectangles[j].y + f_right_rectangles[j].height / 2;
+
+			//Calculate distance between points
+			l_distance_p1_p2 = std::pow(l_point_2.x - l_point_1.x, 2) + std::pow(l_point_2.y - l_point_1.y, 2);
+			l_distance_p1_p2 = std::sqrt(l_distance_p1_p2);
+
+			//Slot compare
+			if (l_distance_p1_p2 < m_max_dist_slot_short && l_distance_p1_p2 > m_min_dist_slot_short
+				|| l_distance_p1_p2 < m_max_dist_slot_long && l_distance_p1_p2 > m_min_dist_slot_long)
+			{
+				//Perpendicular slope calculation
+				l_perpendicular_slope = static_cast <float> ((l_point_2.x - l_point_1.x)) /
+					static_cast <float> ((l_point_2.y - l_point_1.y));
+
+				//Middle point between point_1 and point_2
+				l_mid_point.x = (static_cast <float> (l_point_1.x) + static_cast <float> (l_point_2.x)) / 2.0f;
+				l_mid_point.y = (static_cast <float> (l_point_1.y) + static_cast <float> (l_point_2.y)) / 2.0f;
+
+				//Solve perpendicular lines
+				if (std::abs(l_point_1.x - l_point_2.x) < std::abs(l_point_1.y - l_point_2.y)) //then perpendicular variance in x
+				{
+					l_point_max.y = -((l_perpendicular_slope * (f_image.cols - l_mid_point.x)) - l_mid_point.y);
+					l_point_max.x = f_image.cols;
+
+					l_point_min.y = -((l_perpendicular_slope * (0 - l_mid_point.x)) - l_mid_point.y);
+					l_point_min.x = 0;
+
+					//Solve polygon point to slot
+					l_point_3.x = f_image.cols;
+					l_point_3.y = l_point_max.y - (l_mid_point.y - l_point_1.y);
+					l_point_4.x = f_image.cols;
+					l_point_4.y = l_point_max.y + (l_point_2.y - l_mid_point.y);
+				}
+				else { //then perpendicular variance in y so, it´s not right slot
+					continue;
+				}
+
+				//Calculate distance between generated points and the middle point
+				l_distance_pmax_pmid = std::pow(l_point_max.x - l_mid_point.x, 2) + std::pow(l_point_max.y - l_mid_point.y, 2);
+				l_distance_pmax_pmid = std::sqrt(l_distance_pmax_pmid);
+				l_distance_pmin_pmid = std::pow(l_point_min.x - l_mid_point.x, 2) + std::pow(l_point_min.y - l_mid_point.y, 2);
+				l_distance_pmin_pmid = std::sqrt(l_distance_pmin_pmid);
+
+				//Distance restriction
+				if (l_distance_pmax_pmid > l_distance_pmin_pmid)
+				{
+					continue;
+				}
+				else {
+					l_angle = angleOf(l_mid_point, l_point_max);
+
+					//Compare angles restrictions
+					if (l_angle < 235.0 || l_angle > 135.0) //then we have a slot candidate
+					{
+						l_slot.setHeading(l_angle);
+						l_id++; //Increase ID
+						l_slot.setId(l_id);
+						l_slot.setWidth(l_distance_p1_p2);
+						l_slot.setPoint1(cv::Point2i(l_point_1.x, l_point_1.y));
+						l_slot.setPoint2(cv::Point2i(l_point_2.x, l_point_2.y));
+						l_slot.setPoint3(cv::Point2i(l_point_3.x, l_point_3.y));
+						l_slot.setPoint4(cv::Point2i(l_point_4.x, l_point_4.y));
+						l_slot.setOrientation("right");
+
+						//Save slot candidate
+						l_slot_list.push_back(l_slot);
+					}
+				}
+			}
+		}
+	}
+
+	std::list < CSlot > l_slot_candidates_list;
+	bool l_not_candidate = false;
+
+	//Correct slot overlapping
+	for (CSlot l_slot_object1 : l_slot_list)
+	{
+		for (CSlot l_slot_object2 : l_slot_list)
+		{
+
+			if (l_slot_object1.getId() == l_slot_object2.getId())
+			{
+				continue;
+			}
+
+			else if (l_slot_object2.getPoint1().y > l_slot_object1.getPoint1().y&&
+				l_slot_object2.getPoint1().y < l_slot_object1.getPoint2().y)
+			{
+				l_not_candidate = true;
+				continue;
+			}
+
+			else if (l_slot_object2.getPoint2().y > l_slot_object1.getPoint1().y&&
+				l_slot_object2.getPoint2().y < l_slot_object1.getPoint2().y)
+			{
+				l_not_candidate = true;
+				continue;
+			}
+
+		}
+
+		if (l_not_candidate)
+		{
+			//Update boolean
+			l_not_candidate = false;
+			continue;
+		}
+		else
+		{
+			l_slot_candidates_list.push_back(l_slot_object1);
+			//Update boolean
+			l_not_candidate = false;
+		}
+	}
+
+	for (CSlot l_slot_object : l_slot_candidates_list)
+	{
+#ifdef DEBUG_LABEL_TRACE
+		//Draw slots candidates
+		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint2(), colors[RED], 2);
+		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint3(), colors[RED], 2);
+		cv::line(f_image, l_slot_object.getPoint2(), l_slot_object.getPoint4(), colors[RED], 2);
+
+		//Console debug
+		std::cout << "---------------" << std::endl;
+		std::cout << "Slot Point with ID -> " << std::to_string(l_slot_object.getId()) << ":\n\n" << std::endl;
+		std::cout << "Point 1: " << l_slot_object.getPoint1() << "\n" << std::endl;
+		std::cout << "Point 2: " << l_slot_object.getPoint2() << "\n" << std::endl;
+		std::cout << "Point 3: " << l_slot_object.getPoint3() << "\n" << std::endl;
+		std::cout << "Point 4: " << l_slot_object.getPoint4() << "\n" << std::endl;
+#endif
+
+		//Save slot candidate in function list
+		f_slot_list.push_back(l_slot_object);
+	}
+}
+
+void correctAndDrawDownSlots(const std::vector <cv::Rect>& f_down_rectangles, cv::Mat& f_image, std::list <CSlot>& f_slot_list)
+{
+	//Variable
+	cv::Point2i l_point_1, l_point_2, l_point_3, l_point_4, l_point_max, l_point_min;
+	float l_distance_p1_p2, l_distance_pmax_pmid, l_distance_pmin_pmid;
+	float l_perpendicular_slope;
+	float l_angle;
+	int8_t l_id = 0;
+	cv::Point2f l_mid_point;
+	CSlot l_slot;
+	std::list <CSlot> l_slot_list;
+
+	//Loop between every pair of DOWN rectangles
+	for (size_t i = 0; i < f_down_rectangles.size(); i++)
+	{
+		for (size_t j = 0; j < f_down_rectangles.size(); j++)
+		{
+			if (i == j || j < i)
+				continue;
+
+			//Calculate mass center in each rectangle
+			l_point_1.x = f_down_rectangles[i].x + f_down_rectangles[i].width / 2;
+			l_point_1.y = f_down_rectangles[i].y + f_down_rectangles[i].height / 2;
+			l_point_2.x = f_down_rectangles[j].x + f_down_rectangles[j].width / 2;
+			l_point_2.y = f_down_rectangles[j].y + f_down_rectangles[j].height / 2;
+
+			//Calculate distance between points
+			l_distance_p1_p2 = std::pow(l_point_2.x - l_point_1.x, 2) + std::pow(l_point_2.y - l_point_1.y, 2);
+			l_distance_p1_p2 = std::sqrt(l_distance_p1_p2);
+			 
+			//Slot compare
+			if (l_distance_p1_p2 < m_max_dist_slot_short && l_distance_p1_p2 > m_min_dist_slot_short) //Not comparison in long slots to this orientation
+			{
+				//Perpendicular slope calculation
+				l_perpendicular_slope = static_cast <float> (l_point_1.x - l_point_2.x) /
+					static_cast <float> (l_point_1.y - l_point_2.y);
+				l_perpendicular_slope = -l_perpendicular_slope;
+
+				//Middle point between point_1 and point_2
+				l_mid_point.x = (static_cast <float> (l_point_1.x) + static_cast <float> (l_point_2.x)) / 2.0f;
+				l_mid_point.y = (static_cast <float> (l_point_1.y) + static_cast <float> (l_point_2.y)) / 2.0f;
+
+				//Solve perpendicular lines
+ 				if (std::abs(l_point_1.x - l_point_2.x) > std::abs(l_point_1.y - l_point_2.y))
+				{
+					l_point_max.y = 0;
+					l_point_max.x = ((l_point_max.y - l_mid_point.y) / l_perpendicular_slope) + l_mid_point.x;
+
+					l_point_min.y = f_image.rows;
+					l_point_min.x = ((l_point_min.y - l_mid_point.y) / l_perpendicular_slope ) + l_mid_point.x;
+					
+					////Draw perpendicular line to slot
+					//cv::line(f_image, l_mid_point, l_point_max, colors[GREEN], 2);
+					//cv::imshow("as", f_image);
+					//cv::waitKey(0);
+					//cv::line(f_image, l_mid_point, l_point_min, colors[GREEN], 2);
+					//cv::imshow("as", f_image);
+					//cv::waitKey(20);
+
+					//Solve polygon point to slot
+					l_point_3.x = l_point_min.x - (l_mid_point.x - l_point_1.x);
+					l_point_3.y = f_image.rows;
+					l_point_4.x = l_point_min.x + (l_point_2.x - l_mid_point.x);
+					l_point_4.y = f_image.rows;
+				}
+				else { //then perpendicular variance in 'x' so, it´s not down slot
+					continue;
+				}
+
+				//Calculate distance between generated points and the middle point
+				l_distance_pmax_pmid = std::pow(l_point_max.x - l_mid_point.x, 2) + std::pow(l_point_max.y - l_mid_point.y, 2);
+				l_distance_pmax_pmid = std::sqrt(l_distance_pmax_pmid);
+				l_distance_pmin_pmid = std::pow(l_point_min.x - l_mid_point.x, 2) + std::pow(l_point_min.y - l_mid_point.y, 2);
+				l_distance_pmin_pmid = std::sqrt(l_distance_pmin_pmid);
+
+				//Distance restriction
+				if (l_distance_pmax_pmid < l_distance_pmin_pmid)
+				{
+					continue;
+				}
+				else {
+					l_angle = angleOf(l_mid_point, l_point_max);
+
+					//Compare angles restrictions
+					if (l_angle < 135.0 || l_angle > 45.0) //then we have a slot candidate
+					{
+						l_slot.setHeading(l_angle);
+						l_id++; //Increase ID
+						l_slot.setId(l_id);
+						l_slot.setWidth(l_distance_p1_p2);
+						l_slot.setPoint1(cv::Point2i(l_point_1.x, l_point_1.y));
+						l_slot.setPoint2(cv::Point2i(l_point_2.x, l_point_2.y));
+						l_slot.setPoint3(cv::Point2i(l_point_3.x, l_point_3.y));
+						l_slot.setPoint4(cv::Point2i(l_point_4.x, l_point_4.y));
+						l_slot.setOrientation("down");
+
+						//Save slot candidate
+						l_slot_list.push_back(l_slot);
+					}
+				}
+			}
+		}
+	}
+
+	std::list < CSlot > l_slot_candidates_list;
+	bool l_not_candidate = false;
+
+	//Correct slot overlapping
+	for (CSlot l_slot_object1 : l_slot_list)
+	{
+		for (CSlot l_slot_object2 : l_slot_list)
+		{
+
+			if (l_slot_object1.getId() == l_slot_object2.getId())
+			{
+				continue;
+			}
+
+			else if (l_slot_object2.getPoint1().x > l_slot_object1.getPoint1().x&&
+				l_slot_object2.getPoint1().x < l_slot_object1.getPoint2().x)
+			{
+				l_not_candidate = true;
+				continue;
+			}
+
+			else if (l_slot_object2.getPoint2().x > l_slot_object1.getPoint1().x&&
+				l_slot_object2.getPoint2().x < l_slot_object1.getPoint2().x)
+			{
+				l_not_candidate = true;
+				continue;
+			}
+
+		}
+
+		if (l_not_candidate)
+		{
+			//Update boolean
+			l_not_candidate = false;
+			continue;
+		}
+		else
+		{
+			l_slot_candidates_list.push_back(l_slot_object1);
+			//Update boolean
+			l_not_candidate = false;
+		}
+	}
+
+	for (CSlot l_slot_object : l_slot_candidates_list)
+	{
+#ifdef DEBUG_LABEL_TRACE
+		//Draw slots candidates
+		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint2(), colors[GREEN], 2);
+		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint3(), colors[GREEN], 2);
+		cv::line(f_image, l_slot_object.getPoint2(), l_slot_object.getPoint4(), colors[GREEN], 2);
+
+		//Console debug
+		std::cout << "---------------" << std::endl;
+		std::cout << "Slot Point with ID -> " << std::to_string(l_slot_object.getId()) << ":\n\n" << std::endl;
+		std::cout << "Point 1: " << l_slot_object.getPoint1() << "\n" << std::endl;
+		std::cout << "Point 2: " << l_slot_object.getPoint2() << "\n" << std::endl;
+		std::cout << "Point 3: " << l_slot_object.getPoint3() << "\n" << std::endl;
+		std::cout << "Point 4: " << l_slot_object.getPoint4() << "\n" << std::endl;
+#endif
+
+		//Save slot candidate in function list
+		f_slot_list.push_back(l_slot_object);
+	}
+}
+
+void correctAndDrawUpSlots(const std::vector <cv::Rect>& f_up_rectangles, cv::Mat& f_image, std::list <CSlot>& f_slot_list)
+{
+	//Variable
+	cv::Point2i l_point_1, l_point_2, l_point_3, l_point_4, l_point_max, l_point_min;
+	float l_distance_p1_p2, l_distance_pmax_pmid, l_distance_pmin_pmid;
+	float l_perpendicular_slope;
+	float l_angle;
+	int8_t l_id = 0;
+	cv::Point2f l_mid_point;
+	CSlot l_slot;
+	std::list <CSlot> l_slot_list;
+
+	//Loop between every pair of DOWN rectangles
+	for (size_t i = 0; i < f_up_rectangles.size(); i++)
+	{
+		for (size_t j = 0; j < f_up_rectangles.size(); j++)
+		{
+			if (i == j || j < i)
+				continue;
+
+			//Calculate mass center in each rectangle
+			l_point_1.x = f_up_rectangles[i].x + f_up_rectangles[i].width / 2;
+			l_point_1.y = f_up_rectangles[i].y + f_up_rectangles[i].height / 2;
+			l_point_2.x = f_up_rectangles[j].x + f_up_rectangles[j].width / 2;
+			l_point_2.y = f_up_rectangles[j].y + f_up_rectangles[j].height / 2;
+
+			//Calculate distance between points
+			l_distance_p1_p2 = std::pow(l_point_2.x - l_point_1.x, 2) + std::pow(l_point_2.y - l_point_1.y, 2);
+			l_distance_p1_p2 = std::sqrt(l_distance_p1_p2);
+
+			//Slot compare
+			if (l_distance_p1_p2 < m_max_dist_slot_short && l_distance_p1_p2 > m_min_dist_slot_short) //Not comparison in long slots to this orientation
+			{
+				//Perpendicular slope calculation
+				l_perpendicular_slope = static_cast <float> (l_point_1.x - l_point_2.x) /
+					static_cast <float> (l_point_1.y - l_point_2.y);
+				l_perpendicular_slope = -l_perpendicular_slope;
+
+				//Middle point between point_1 and point_2
+				l_mid_point.x = (static_cast <float> (l_point_1.x) + static_cast <float> (l_point_2.x)) / 2.0f;
+				l_mid_point.y = (static_cast <float> (l_point_1.y) + static_cast <float> (l_point_2.y)) / 2.0f;
+
+				//Solve perpendicular lines
+				if (std::abs(l_point_1.x - l_point_2.x) > std::abs(l_point_1.y - l_point_2.y))
+				{
+					l_point_max.y = 0;
+					l_point_max.x = ((l_point_max.y - l_mid_point.y) / l_perpendicular_slope) + l_mid_point.x;
+
+					l_point_min.y = f_image.rows;
+					l_point_min.x = ((l_point_min.y - l_mid_point.y) / l_perpendicular_slope) + l_mid_point.x;
+
+					////Draw perpendicular line to slot
+					//cv::line(f_image, l_mid_point, l_point_max, colors[GREEN], 2);
+					//cv::imshow("as", f_image);
+					//cv::waitKey(0);
+					//cv::line(f_image, l_mid_point, l_point_min, colors[GREEN], 2);
+					//cv::imshow("as", f_image);
+					//cv::waitKey(20);
+
+					//Solve polygon point to slot
+					l_point_3.x = l_point_max.x - (l_mid_point.x - l_point_1.x);
+					l_point_3.y = 0;
+					l_point_4.x = l_point_max.x + (l_point_2.x - l_mid_point.x);
+					l_point_4.y = 0;
+				}
+				else { //then perpendicular variance in 'x' so, it´s not down slot
+					continue;
+				}
+
+				//Calculate distance between generated points and the middle point
+				l_distance_pmax_pmid = std::pow(l_point_max.x - l_mid_point.x, 2) + std::pow(l_point_max.y - l_mid_point.y, 2);
+				l_distance_pmax_pmid = std::sqrt(l_distance_pmax_pmid);
+				l_distance_pmin_pmid = std::pow(l_point_min.x - l_mid_point.x, 2) + std::pow(l_point_min.y - l_mid_point.y, 2);
+				l_distance_pmin_pmid = std::sqrt(l_distance_pmin_pmid);
+
+				//Distance restriction
+				if (l_distance_pmax_pmid > l_distance_pmin_pmid)
+				{
+					continue;
+				}
+				else {
+					l_angle = angleOf(l_mid_point, l_point_max);
+
+					//Compare angles restrictions
+					if (l_angle < 315.0 || l_angle > 225.0) //then we have a slot candidate
+					{
+						l_slot.setHeading(l_angle);
+						l_id++; //Increase ID
+						l_slot.setId(l_id);
+						l_slot.setWidth(l_distance_p1_p2);
+						l_slot.setPoint1(cv::Point2i(l_point_1.x, l_point_1.y));
+						l_slot.setPoint2(cv::Point2i(l_point_2.x, l_point_2.y));
+						l_slot.setPoint3(cv::Point2i(l_point_3.x, l_point_3.y));
+						l_slot.setPoint4(cv::Point2i(l_point_4.x, l_point_4.y));
+						l_slot.setOrientation("down");
+
+						//Save slot candidate
+						l_slot_list.push_back(l_slot);
+					}
+				}
+			}
+		}
+	}
+
+	std::list < CSlot > l_slot_candidates_list;
+	bool l_not_candidate = false;
+
+	//Correct slot overlapping
+	for (CSlot l_slot_object1 : l_slot_list)
+	{
+		for (CSlot l_slot_object2 : l_slot_list)
+		{
+
+			if (l_slot_object1.getId() == l_slot_object2.getId())
+			{
+				continue;
+			}
+
+			else if (l_slot_object2.getPoint1().x > l_slot_object1.getPoint1().x&&
+				l_slot_object2.getPoint1().x < l_slot_object1.getPoint2().x)
+			{
+				l_not_candidate = true;
+				continue;
+			}
+
+			else if (l_slot_object2.getPoint2().x > l_slot_object1.getPoint1().x&&
+				l_slot_object2.getPoint2().x < l_slot_object1.getPoint2().x)
+			{
+				l_not_candidate = true;
+				continue;
+			}
+
+		}
+
+		if (l_not_candidate)
+		{
+			//Update boolean
+			l_not_candidate = false;
+			continue;
+		}
+		else
+		{
+			l_slot_candidates_list.push_back(l_slot_object1);
+			//Update boolean
+			l_not_candidate = false;
+		}
+	}
+
+	for (CSlot l_slot_object : l_slot_candidates_list)
+	{
+#ifdef DEBUG_LABEL_TRACE
+		//Draw slots candidates
+		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint2(), colors[ORANGE], 2);
+		cv::line(f_image, l_slot_object.getPoint1(), l_slot_object.getPoint3(), colors[ORANGE], 2);
+		cv::line(f_image, l_slot_object.getPoint2(), l_slot_object.getPoint4(), colors[ORANGE], 2);
+
+		//Console debug
+		std::cout << "---------------" << std::endl;
+		std::cout << "Slot Point with ID -> " << std::to_string(l_slot_object.getId()) << ":\n\n" << std::endl;
+		std::cout << "Point 1: " << l_slot_object.getPoint1() << "\n" << std::endl;
+		std::cout << "Point 2: " << l_slot_object.getPoint2() << "\n" << std::endl;
+		std::cout << "Point 3: " << l_slot_object.getPoint3() << "\n" << std::endl;
+		std::cout << "Point 4: " << l_slot_object.getPoint4() << "\n" << std::endl;
+#endif
+
+		//Save slot candidate in function list
+		f_slot_list.push_back(l_slot_object);
+	}
+}
+
+/**
+ * Work out the angle from the x horizontal winding anti-clockwise
+ * in screen space.
+ *
+ * The value returned from the following should be 315.
+ * <pre>
+ * x,y -------------
+ *     |  1,1
+ *     |    \
+ *     |     \
+ *     |     2,2
+ * </pre>
+ * @param p1
+ * @param p2
+ * @return - a float from 0 to 360
+ */
+float angleOf(const cv::Point2f& f_p1, const cv::Point2f& f_p2) {
+	// NOTE: Remember that most math has the Y axis as positive above the X.
+	// However, for screens we have Y as positive below. For this reason, 
+	// the Y values are inverted to get the expected results.
+
+	//Local variables
+	float l_deltaY = (f_p1.y - f_p2.y);
+	float l_deltaX = (f_p2.x - f_p1.x);
+
+	float l_result = atan2 (l_deltaY, l_deltaX) * 180.0 / PI;
+
+	return (l_result < 0) ? (360.0f + l_result) : l_result;
+}
+
 //---------------------------------------------------------

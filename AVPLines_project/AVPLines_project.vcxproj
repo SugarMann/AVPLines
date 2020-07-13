@@ -139,12 +139,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\CFile.cpp" />
+    <ClCompile Include="src\CSlot.cpp" />
     <ClCompile Include="src\jsoncpp.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\CMarkPoint.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\CFile.hpp" />
+    <ClInclude Include="include\CSlot.hpp" />
     <ClInclude Include="include\json\json-forwards.h" />
     <ClInclude Include="include\json\json.h" />
     <ClInclude Include="include\main.hpp" />
