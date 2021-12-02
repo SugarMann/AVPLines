@@ -1,9 +1,12 @@
+//=====================================================================================================================
+// Includes
+//=====================================================================================================================
 #include <stdlib.h>
 #include <stdio.h>
 #include <vector>
 #include <math.h>
 
-#include <main.hpp>
+#include <vs/AVPLines/main.hpp>
 
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
@@ -51,8 +54,8 @@ static cv::Scalar colors[] =
 };
 
 //Global variables
-int m_number_detectors = 3; //nº of detectors - 1 (minus one)
-int m_number_divisions = 6; //nº of division to process in the image
+int m_number_detectors = 3; //nï¿½ of detectors - 1 (minus one)
+int m_number_divisions = 6; //nï¿½ of division to process in the image
 float m_group_rectangles_scale = 0.2;
 //float m_confidence = 0.5f;
 bool hogs_sel = true;
@@ -1059,7 +1062,7 @@ void correctAndDrawLeftSlots ( const std::vector <cv::Rect>& f_left_rectangles, 
 					l_point_4.x = 0;
 					l_point_4.y = l_point_min.y + (l_point_2.y - l_mid_point.y);
 				}
-				else { //then perpendicular variance in y so, it´s not left slot
+				else { //then perpendicular variance in y so, itï¿½s not left slot
 					continue;
 				}
 
@@ -1224,7 +1227,7 @@ void correctAndDrawRightSlots(const std::vector <cv::Rect>& f_right_rectangles, 
 					l_point_4.x = f_image.cols;
 					l_point_4.y = l_point_max.y + (l_point_2.y - l_mid_point.y);
 				}
-				else { //then perpendicular variance in y so, it´s not right slot
+				else { //then perpendicular variance in y so, itï¿½s not right slot
 					continue;
 				}
 
@@ -1396,7 +1399,7 @@ void correctAndDrawDownSlots(const std::vector <cv::Rect>& f_down_rectangles, cv
 					l_point_4.x = l_point_min.x + (l_point_2.x - l_mid_point.x);
 					l_point_4.y = f_image.rows;
 				}
-				else { //then perpendicular variance in 'x' so, it´s not down slot
+				else { //then perpendicular variance in 'x' so, itï¿½s not down slot
 					continue;
 				}
 
@@ -1568,7 +1571,7 @@ void correctAndDrawUpSlots(const std::vector <cv::Rect>& f_up_rectangles, cv::Ma
 					l_point_4.x = l_point_max.x + (l_point_2.x - l_mid_point.x);
 					l_point_4.y = 0;
 				}
-				else { //then perpendicular variance in 'x' so, it´s not down slot
+				else { //then perpendicular variance in 'x' so, itï¿½s not down slot
 					continue;
 				}
 

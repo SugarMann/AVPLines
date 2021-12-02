@@ -1,7 +1,29 @@
+//=====================================================================================================================
+// Include guards
+//=====================================================================================================================
 
-#include <CFile.hpp>
-#include <CMarkPoint.hpp>
-#include <CSlot.hpp>
+#ifndef MAIN_HPP
+#define MAIN_HPP
+
+//=====================================================================================================================
+// Defines and macros
+//=====================================================================================================================
+#ifdef _WIN32
+#    ifdef AVPLINES_EXPORTS
+#       define AVPLINES_API __declspec(dllexport)
+#    else
+#       define AVPLINES_API __declspec(dllimport)
+#    endif
+#else
+#    define AVPLINES_API
+#endif
+
+//=====================================================================================================================
+// Includes
+//=====================================================================================================================
+#include <vs/AVPLines/CFile.hpp>
+#include <vs/AVPLines/CMarkPoint.hpp>
+#include <vs/AVPLines/CSlot.hpp>
 
 #include <string>
 #include <iostream>
@@ -46,4 +68,10 @@ void correctAndDrawUpSlots(const std::vector <cv::Rect>& f_up_rectangles, cv::Ma
 void correctAndDrawDownSlots(const std::vector <cv::Rect>& f_down_rectangles, cv::Mat& f_image, std::list <CSlot>& f_slot_list);
 
 float angleOf (const cv::Point2f& f_p1, const cv::Point2f& f_p2);
+#endif
+
+
+//=====================================================================================================================
+// End of File
+//=====================================================================================================================
 

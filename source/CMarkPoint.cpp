@@ -1,4 +1,7 @@
-#include "CMarkPoint.hpp"
+//=====================================================================================================================
+// Includes
+//=====================================================================================================================
+#include "vs/AVPLines/CMarkPoint.hpp"
 
 //MarkPoint constructors
 CMarkPoint::CMarkPoint(int f_lenght, std::vector<cv::Point2d> f_points_vector, cv::Mat f_image)

@@ -1,0 +1,2 @@
+#pkgname pkgver compatibility visibility
+OpenCV 4.2.0 EXACT PUBLIC

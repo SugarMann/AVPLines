@@ -1,4 +1,7 @@
-#include "CSlot.hpp"
+//=====================================================================================================================
+// Includes
+//=====================================================================================================================
+#include "vs/AVPLines/CSlot.hpp"
 
 //Slot constructors
 CSlot::CSlot(float f_heading, cv::Point2i f_point_1, cv::Point2i f_point_2, cv::Point2i f_point_3, cv::Point2i f_point_4,

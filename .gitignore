@@ -354,3 +354,13 @@ MigrationBackup/
 resources/
 resources.zip
 AVPLines_project/AVPLines_project.vcxproj
+build_x64-Debug
+build_x64-Release
+AVPLines_project
+install
+docs
+CMakeSettings.json
+.vscode
+settings_gen.py
+settings.json.in
+resources - Acceso directo.lnk

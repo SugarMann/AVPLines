@@ -1,6 +1,9 @@
-#include "CFile.hpp"
+//=====================================================================================================================
+// Includes
+//=====================================================================================================================
+#include "vs/AVPLines/CFile.hpp"
 
-#include <json/json.h>
+#include <vs/AVPLines/json/json.h>
 #include <Windows.h>
 #include <fstream>
 #include <iterator>
