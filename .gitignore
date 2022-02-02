@@ -364,3 +364,6 @@ CMakeSettings.json
 settings_gen.py
 settings.json.in
 resources - Acceso directo.lnk
+build-release
+build-Debug
+test

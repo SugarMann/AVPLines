@@ -54,9 +54,9 @@ static cv::Scalar colors[] =
 };
 
 //Global variables
-int m_number_detectors = 3; //n� of detectors - 1 (minus one)
-int m_number_divisions = 6; //n� of division to process in the image
-float m_group_rectangles_scale = 0.2;
+int m_number_detectors = 3; //number of detectors - 1 (minus one)
+int m_number_divisions = 6; //number of division to process in the image
+float m_group_rectangles_scale = 0.2f;
 //float m_confidence = 0.5f;
 bool hogs_sel = true;
 float m_max_dist_slot_short = 190;
