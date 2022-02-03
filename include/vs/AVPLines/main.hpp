@@ -42,6 +42,9 @@ void writeNegativeTrainingSet ( std::vector< std::string >& f_file_bmp_names, st
 void writePositiveTrainingSet ( std::vector< std::string >& f_file_json_names, std::vector< std::string >& f_file_bmp_names,
 	std::list< CMarkPoint >& f_mark_point_list, CFile& f_file_object, uint8_t f_width, uint8_t f_height );
 
+void writeAnnotationsTestSet( std::vector< std::string >& f_file_json_names, std::vector< std::string >& f_file_bmp_names,
+	std::list< CMarkPoint >& f_mark_point_list, CFile& f_file_object, uint8_t f_width, uint8_t f_height );
+
 void featuresExtractor ( CFile& f_file_object, std::vector< std::string >& f_file_bmp_names,
 	std::list< cv::Mat >& f_detector_lst, uint8_t f_width, uint8_t f_height);
 
