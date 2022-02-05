@@ -369,5 +369,5 @@ build-Debug
 test
 
 # Cmake info
-CmakeLists.txt
+CMakeLists.txt
 
