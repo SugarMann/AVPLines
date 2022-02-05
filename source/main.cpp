@@ -6,7 +6,7 @@
 #include <vector>
 #include <math.h>
 
-#include <vs/AVPLines/main.hpp>
+#include <vs/CPD/main.hpp>
 
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
@@ -32,22 +32,22 @@
 //  #define EXTRACT_FEATURES
 
 // Define to train detectors
-#define TRAIN_DETECTORS
+// #define TRAIN_DETECTORS
 
 // Define to predict how works detectors
-// #define PREDICT_IMAGES
+#define PREDICT_IMAGES
 
 // Define to trace times of processing
 #define TIME_PROCESS
 
 // Define to trace debug
-// #define DEBUG_VISUAL_TRACE
+#define DEBUG_VISUAL_TRACE
 
 // Define shell trace
 #define DEBUG_PROMPT_TRACE
 
 // Define log predictions
-// #define LOG_RESULTS
+#define LOG_RESULTS
 
 // Some colors to draw with
 enum
@@ -948,7 +948,7 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 			l_all_rectangles.insert(std::end(l_all_rectangles), std::begin(l_up_rectangles), std::end(l_up_rectangles));
 
 			// Group rectangles of all clasifiers
-			groupRectanglesModified(l_all_rectangles, 1, 0.7, 0, 0);
+			cv::groupRectangles(l_all_rectangles, 1, 0.7, 0, 0);
 
 #ifdef LOG_RESULTS
 			// Log results

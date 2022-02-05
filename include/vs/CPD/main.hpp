@@ -9,21 +9,21 @@
 // Defines and macros
 //=====================================================================================================================
 #ifdef _WIN32
-#ifdef AVPLINES_EXPORTS
-#define AVPLINES_API __declspec(dllexport)
+#ifdef CPD_EXPORTS
+#define CPD_API __declspec(dllexport)
 #else
-#define AVPLINES_API __declspec(dllimport)
+#define CPD_API __declspec(dllimport)
 #endif
 #else
-#define AVPLINES_API
+#define CPD_API
 #endif
 
 //=====================================================================================================================
 // Includes
 //=====================================================================================================================
-#include <vs/AVPLines/CFile.hpp>
-#include <vs/AVPLines/CMarkPoint.hpp>
-#include <vs/AVPLines/CSlot.hpp>
+#include <vs/CPD/CFile.hpp>
+#include <vs/CPD/CMarkPoint.hpp>
+#include <vs/CPD/CSlot.hpp>
 
 #include <string>
 #include <iostream>

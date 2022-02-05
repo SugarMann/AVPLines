@@ -9,13 +9,13 @@
 // Defines and macros
 //=====================================================================================================================
 // #ifdef _WIN32
-// #    ifdef AVPLINES_EXPORTS
-// #       define AVPLINES_API __declspec(dllexport)
+// #    ifdef CPD_EXPORTS
+// #       define CPD_API __declspec(dllexport)
 // #    else
-// #       define AVPLINES_API __declspec(dllimport)
+// #       define CPD_API __declspec(dllimport)
 // #    endif
 // #else
-// #    define AVPLINES_API
+// #    define CPD_API
 // #endif
 
 //=====================================================================================================================
