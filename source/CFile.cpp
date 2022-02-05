@@ -478,7 +478,7 @@ void CFile::logGetFramesMember(const std::vector<cv::Rect> &f_croppedImages, rap
 		rapidjson::Value l_label;
 		l_label.SetString("corner", l_allocator);
 		l_object.AddMember("label", l_label, l_allocator);
-		// l_object.AddMember("confidence", 0, l_allocator);
+		l_object.AddMember("confidence", 0.0f, l_allocator);
 		l_object.AddMember("top", l_cropImage.y, l_allocator);
 		l_object.AddMember("left", l_cropImage.x, l_allocator);
 		l_object.AddMember("bottom", l_cropImage.y + l_cropImage.height, l_allocator);
