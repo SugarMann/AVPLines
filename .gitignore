@@ -367,3 +367,7 @@ resources - Acceso directo.lnk
 build-release
 build-Debug
 test
+
+# Cmake info
+CmakeLists.txt
+
