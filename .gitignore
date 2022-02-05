@@ -353,10 +353,10 @@ MigrationBackup/
 #Resources folder (training set of positive and negative samples)
 resources/
 resources.zip
-AVPLines_project/AVPLines_project.vcxproj
+CPD_project/CPD_project.vcxproj
 build_x64-Debug
 build_x64-Release
-AVPLines_project
+CPD_project
 install
 docs
 CMakeSettings.json
@@ -371,3 +371,4 @@ test
 # Cmake info
 CMakeLists.txt
 
+CMakeLists.txt
