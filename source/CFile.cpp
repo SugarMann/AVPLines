@@ -1,9 +1,9 @@
 //=====================================================================================================================
 // Includes
 //=====================================================================================================================
-#include "vs/CPD/CFile.hpp"
+#include "vs/PCD/CFile.hpp"
 
-#include <vs/CPD/json/json.h>
+#include <vs/PCD/json/json.h>
 #include <Windows.h>
 #include <fstream>
 #include <iterator>

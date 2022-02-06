@@ -1,7 +1,7 @@
 //=====================================================================================================================
 // Includes
 //=====================================================================================================================
-#include "vs/CPD/CMarkPoint.hpp"
+#include "vs/PCD/CMarkPoint.hpp"
 
 //MarkPoint constructors
 CMarkPoint::CMarkPoint(int f_length, std::vector<cv::Point2d> f_points_vector, cv::Mat f_image)

@@ -9,21 +9,21 @@
 // Defines and macros
 //=====================================================================================================================
 #ifdef _WIN32
-#ifdef CPD_EXPORTS
-#define CPD_API __declspec(dllexport)
+#ifdef PCD_EXPORTS
+#define PCD_API __declspec(dllexport)
 #else
-#define CPD_API __declspec(dllimport)
+#define PCD_API __declspec(dllimport)
 #endif
 #else
-#define CPD_API
+#define PCD_API
 #endif
 
 //=====================================================================================================================
 // Includes
 //=====================================================================================================================
-#include <vs/CPD/CFile.hpp>
-#include <vs/CPD/CMarkPoint.hpp>
-#include <vs/CPD/CSlot.hpp>
+#include <vs/PCD/CFile.hpp>
+#include <vs/PCD/CMarkPoint.hpp>
+#include <vs/PCD/CSlot.hpp>
 
 #include <string>
 #include <iostream>

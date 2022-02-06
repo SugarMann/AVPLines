@@ -6,7 +6,7 @@
 #include <vector>
 #include <math.h>
 
-#include <vs/CPD/main.hpp>
+#include <vs/PCD/main.hpp>
 
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>

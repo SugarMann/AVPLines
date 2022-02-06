@@ -9,13 +9,13 @@
 // Defines and macros
 //=====================================================================================================================
 // #ifdef _WIN32
-// #    ifdef CPD_EXPORTS
-// #       define CPD_API __declspec(dllexport)
+// #    ifdef PCD_EXPORTS
+// #       define PCD_API __declspec(dllexport)
 // #    else
-// #       define CPD_API __declspec(dllimport)
+// #       define PCD_API __declspec(dllimport)
 // #    endif
 // #else
-// #    define CPD_API
+// #    define PCD_API
 // #endif
 
 //=====================================================================================================================
