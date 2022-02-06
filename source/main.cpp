@@ -41,7 +41,7 @@
 #define TIME_PROCESS
 
 // Define to trace debug
-#define DEBUG_VISUAL_TRACE
+// #define DEBUG_VISUAL_TRACE
 
 // Define shell trace
 #define DEBUG_PROMPT_TRACE
@@ -66,10 +66,9 @@ static cv::Scalar colors[] =
 };
 
 // Global variables
-int m_number_detectors = 3; // number of detectors - 1 (minus one)
-int m_number_divisions = 6; // number of division to process in the image
-float m_group_rectangles_scale = 0.2f;
-// float m_confidence = 0.5f;
+int m_number_detectors = 3;			   // number of detectors - 1 (minus one)
+int m_number_divisions = 6;			   // number of division to process in the image
+float m_group_rectangles_scale = 0.4f; // percentual distance between rectangles to group
 bool hogs_sel = true;
 float m_max_dist_slot_short = 190;
 float m_min_dist_slot_short = 135;
@@ -236,6 +235,7 @@ void featuresExtractor(CFile &f_file_object, std::vector<std::string> &f_file_bm
 			cv::cvtColor(l_mark_point.getImage(), l_mat, cv::COLOR_RGB2GRAY);
 
 #ifdef DEBUG_VISUAL_TRACE
+			cv::imshow("Original image", l_mark_point.getImage());
 			cv::imshow("Gray image", l_mat);
 			cv::waitKey(0);
 #endif // DEBUG_LABEL_TRACE
@@ -272,7 +272,7 @@ void featuresExtractor(CFile &f_file_object, std::vector<std::string> &f_file_bm
 
 		// Save in csv
 		std::string l_filename = l_file_object.getPath() + "\\features\\features_" + std::to_string(i) + ".csv";
-		l_file_object.writeCSV(l_filename, l_mat);
+		// l_file_object.writeCSV(l_filename, l_mat);
 
 		// Clear variables
 		l_positive_gradient_vec.clear();
@@ -331,7 +331,7 @@ void featuresExtractor(CFile &f_file_object, std::vector<std::string> &f_file_bm
 
 	// Save in csv file
 	std::string l_filename = l_file_object.getPath() + "\\features\\features_0.csv";
-	l_file_object.writeCSV(l_filename, l_mat);
+	// l_file_object.writeCSV(l_filename, l_mat);
 
 	// Clear variables
 	l_positive_gradient_vec.clear();
@@ -690,11 +690,14 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 		std::cout << "Error opening video stream or file" << std::endl;
 		return;
 	}
-	while (1)
+	while (cap.isOpened())
 	{
 		cv::Mat l_image;
 		// Capture frame-by-frame
 		cap >> l_image;
+		// If the frame is empty, break immediately
+		if (l_image.empty())
+			break;
 		// Increase the number of frames
 		l_nFrames++;
 #endif // READ_VIDEO
@@ -724,6 +727,15 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 				l_is_roi_selected = true;
 				cv::destroyAllWindows();
 			}
+
+			// Convert to grayscale
+			cv::cvtColor(l_image, l_image, cv::COLOR_RGB2GRAY);
+
+			// Down-scale and upscale the image to filter out the noise
+			cv::GaussianBlur(l_image, l_image, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
+
+			// Improve contrast stretching grayscale histogram
+			stretchHistogram(l_image);
 
 			// Create grid over the original image to get the differents square pieces for process and predict
 			for (uint16_t y = 0; y < l_image.rows; y += f_height / m_number_divisions)
@@ -759,42 +771,6 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 					// Crop image
 					cv::Rect l_rect = cv::Rect(x, y, f_width, f_height);
 					l_crop_image = l_image(l_rect);
-
-					// Convert to grayscale
-					cv::cvtColor(l_crop_image, l_crop_image, cv::COLOR_RGB2GRAY);
-
-					// cv::imshow("Gray Image", l_crop_image);
-					// cv::waitKey(0);
-
-					// Down-scale and upscale the image to filter out the noise
-					cv::GaussianBlur(l_crop_image, l_crop_image, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
-
-					// cv::imshow("Filtering noise", l_crop_image);
-					// cv::waitKey(0);
-
-					//#ifdef TIME_PROCESS
-					////Process time counter initialize
-					//				int64_t l_time3, l_time4;
-					//				l_time3 = cv::getTickCount();
-					//#endif	// TIME_PROCESS
-
-					// Improve contrast stretching grayscale histogram
-					stretchHistogram(l_crop_image);
-
-					//#ifdef TIME_PROCESS
-					//				//Obtaining time of process
-					//				l_time4 = cv::getTickCount();
-					//				l_time4 = l_time3 - l_time4;
-					//				//Convert to miliseconds
-					//				l_time4 = 1000 * l_time4 / cv::getTickFrequency();
-					//				l_time3 = 1000 * l_time4;
-					//
-					//				std::cout << "---------------------------------------------------------" << std::endl;
-					//				std::cout << "\n\n--> Strecht time:" << l_time4 << " ms" << std::endl;
-					//#endif // TIME_PROCESS
-
-					// cv::imshow("Stretched histogram Image", l_crop_image);
-					// cv::waitKey(0);
 
 					// Calculate hog for that piece of image
 					if (hogs_sel)
@@ -908,37 +884,128 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 				}
 			}
 
+#ifdef DEBUG_VISUAL_TRACE
+
+			cv::Mat l_aux_right, l_aux_left, l_aux_down, l_aux_up;
+			l_image.copyTo(l_aux_right);
+			l_image.copyTo(l_aux_left);
+			l_image.copyTo(l_aux_down);
+			l_image.copyTo(l_aux_up);
+
+			for (size_t i = 0; i < l_right_rectangles.size(); i++)
+			{
+				cv::rectangle(l_aux_right, l_right_rectangles[i], cv::Scalar(0, 255, 0));
+			}
+
+			cv::namedWindow("Right detections before group", cv::WINDOW_AUTOSIZE);
+			cv::imshow("Right detections before group", l_aux_right);
+			cv::waitKey(0);
+
+			for (size_t i = 0; i < l_left_rectangles.size(); i++)
+			{
+				cv::rectangle(l_aux_left, l_left_rectangles[i], cv::Scalar(0, 255, 0));
+			}
+
+			cv::namedWindow("Left detections before group", cv::WINDOW_AUTOSIZE);
+			cv::imshow("Left detections before group", l_aux_left);
+			cv::waitKey(0);
+			cv::imwrite("D:/repositorio/TFG/image.png", l_aux_left);
+
+			for (size_t i = 0; i < l_down_rectangles.size(); i++)
+			{
+				cv::rectangle(l_aux_down, l_down_rectangles[i], cv::Scalar(0, 255, 0));
+			}
+
+			cv::namedWindow("Down detections before group", cv::WINDOW_AUTOSIZE);
+			cv::imshow("Down detections before group", l_aux_down);
+			cv::waitKey(0);
+
+			for (size_t i = 0; i < l_up_rectangles.size(); i++)
+			{
+				cv::rectangle(l_aux_up, l_up_rectangles[i], cv::Scalar(0, 255, 0));
+			}
+
+			cv::namedWindow("Up detections before group", cv::WINDOW_AUTOSIZE);
+			cv::imshow("Up detections before group", l_aux_up);
+			cv::waitKey(0);
+#endif
+
 			// Correct overlap in detections
-			cv::groupRectangles(l_right_rectangles, 2, m_group_rectangles_scale);
-			cv::groupRectangles(l_up_rectangles, 2, m_group_rectangles_scale);
-			cv::groupRectangles(l_left_rectangles, 2, m_group_rectangles_scale);
-			cv::groupRectangles(l_down_rectangles, 2, m_group_rectangles_scale);
+			cv::groupRectangles(l_right_rectangles, 5, 0.2);
+			cv::groupRectangles(l_up_rectangles, 5, 0.2);
+			cv::groupRectangles(l_left_rectangles, 5, 0.2);
+			cv::groupRectangles(l_down_rectangles, 5, 0.2);
 
-			uint8_t size = static_cast<uint8_t>(l_right_rectangles.size());
-			for (int i = 0; i < size; i++)
+#ifdef DEBUG_VISUAL_TRACE
+
+			l_image.copyTo(l_aux_right);
+			l_image.copyTo(l_aux_left);
+			l_image.copyTo(l_aux_down);
+			l_image.copyTo(l_aux_up);
+
+			for (size_t i = 0; i < l_right_rectangles.size(); i++)
 			{
-				l_right_rectangles.push_back(cv::Rect(l_right_rectangles[i]));
-			}
-			size = static_cast<uint8_t>(l_left_rectangles.size());
-			for (int i = 0; i < size; i++)
-			{
-				l_left_rectangles.push_back(cv::Rect(l_left_rectangles[i]));
-			}
-			size = static_cast<uint8_t>(l_up_rectangles.size());
-			for (int i = 0; i < size; i++)
-			{
-				l_up_rectangles.push_back(cv::Rect(l_up_rectangles[i]));
-			}
-			size = static_cast<uint8_t>(l_down_rectangles.size());
-			for (int i = 0; i < size; i++)
-			{
-				l_down_rectangles.push_back(cv::Rect(l_down_rectangles[i]));
+				cv::rectangle(l_aux_right, l_right_rectangles[i], cv::Scalar(0, 255, 0));
 			}
 
-			cv::groupRectangles(l_right_rectangles, 1, 0.2);
-			cv::groupRectangles(l_up_rectangles, 1, 0.2);
-			cv::groupRectangles(l_left_rectangles, 1, 0.2);
-			cv::groupRectangles(l_down_rectangles, 1, 0.2);
+			cv::namedWindow("Right detections before group", cv::WINDOW_AUTOSIZE);
+			cv::imshow("Right detections before group", l_aux_right);
+			cv::waitKey(0);
+
+			for (size_t i = 0; i < l_left_rectangles.size(); i++)
+			{
+				cv::rectangle(l_aux_left, l_left_rectangles[i], cv::Scalar(0, 255, 0));
+			}
+
+			cv::namedWindow("Left detections before group", cv::WINDOW_AUTOSIZE);
+			cv::imshow("Left detections before group", l_aux_left);
+			cv::waitKey(0);
+			cv::imwrite("D:/repositorio/TFG/image.png", l_aux_left);
+
+			for (size_t i = 0; i < l_down_rectangles.size(); i++)
+			{
+				cv::rectangle(l_aux_down, l_down_rectangles[i], cv::Scalar(0, 255, 0));
+			}
+
+			cv::namedWindow("Down detections before group", cv::WINDOW_AUTOSIZE);
+			cv::imshow("Down detections before group", l_aux_down);
+			cv::waitKey(0);
+
+			for (size_t i = 0; i < l_up_rectangles.size(); i++)
+			{
+				cv::rectangle(l_aux_up, l_up_rectangles[i], cv::Scalar(0, 255, 0));
+			}
+
+			cv::namedWindow("Up detections before group", cv::WINDOW_AUTOSIZE);
+			cv::imshow("Up detections before group", l_aux_up);
+			cv::waitKey(0);
+#endif
+
+			// uint8_t size = static_cast<uint8_t>(l_right_rectangles.size());
+			// for (int i = 0; i < size; i++)
+			// {
+			// 	l_right_rectangles.push_back(cv::Rect(l_right_rectangles[i]));
+			// }
+			// size = static_cast<uint8_t>(l_left_rectangles.size());
+			// for (int i = 0; i < size; i++)
+			// {
+			// 	l_left_rectangles.push_back(cv::Rect(l_left_rectangles[i]));
+			// }
+			// size = static_cast<uint8_t>(l_up_rectangles.size());
+			// for (int i = 0; i < size; i++)
+			// {
+			// 	l_up_rectangles.push_back(cv::Rect(l_up_rectangles[i]));
+			// }
+			// size = static_cast<uint8_t>(l_down_rectangles.size());
+			// for (int i = 0; i < size; i++)
+			// {
+			// 	l_down_rectangles.push_back(cv::Rect(l_down_rectangles[i]));
+			// }
+
+			// cv::groupRectangles(l_right_rectangles, 1, 0.2);
+			// cv::groupRectangles(l_up_rectangles, 1, 0.2);
+			// cv::groupRectangles(l_left_rectangles, 1, 0.2);
+			// cv::groupRectangles(l_down_rectangles, 1, 0.2);
 
 			// Here develop json detections
 			std::vector<cv::Rect> l_all_rectangles;
@@ -948,7 +1015,7 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 			l_all_rectangles.insert(std::end(l_all_rectangles), std::begin(l_up_rectangles), std::end(l_up_rectangles));
 
 			// Group rectangles of all clasifiers
-			cv::groupRectangles(l_all_rectangles, 1, 0.7, 0, 0);
+			groupRectanglesModified(l_all_rectangles, 1, 0.7, 0, 0);
 
 #ifdef LOG_RESULTS
 			// Log results
@@ -959,12 +1026,12 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 
 			for (size_t i = 0; i < l_all_rectangles.size(); i++)
 			{
-				cv::rectangle(l_aux, l_all_rectangles[i], cv::Scalar(255, 128, 255));
+				cv::rectangle(l_aux, l_all_rectangles[i], cv::Scalar(255, 0, 255));
 			}
 
 			cv::namedWindow("Boost Results for all detectors mixed", cv::WINDOW_AUTOSIZE);
 			cv::imshow("Boost Results for all detectors mixed", l_aux);
-			cv::waitKey(10);
+			cv::waitKey(0);
 #endif
 
 			///////////////////////////////////
@@ -1022,6 +1089,7 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 		}
 		cap.release();
 		cv::destroyAllWindows();
+		return;
 	}
 
 	float distanceSample(cv::Mat & f_sample, const cv::Ptr<cv::ml::SVM> &f_svm)
