@@ -69,7 +69,8 @@ static cv::Scalar colors[] =
 int m_number_detectors = 3;			   // number of detectors - 1 (minus one)
 int m_number_divisions = 6;			   // number of division to process in the image
 float m_group_rectangles_scale = 0.4f; // percentual distance between rectangles to group
-bool hogs_sel = true;
+float m_confidence = 0.5f;
+bool hogs_sel = false;
 float m_max_dist_slot_short = 190;
 float m_min_dist_slot_short = 135;
 float m_max_dist_slot_long = 395;
@@ -272,7 +273,7 @@ void featuresExtractor(CFile &f_file_object, std::vector<std::string> &f_file_bm
 
 		// Save in csv
 		std::string l_filename = l_file_object.getPath() + "\\features\\features_" + std::to_string(i) + ".csv";
-		// l_file_object.writeCSV(l_filename, l_mat);
+		l_file_object.writeCSV(l_filename, l_mat);
 
 		// Clear variables
 		l_positive_gradient_vec.clear();
@@ -331,7 +332,7 @@ void featuresExtractor(CFile &f_file_object, std::vector<std::string> &f_file_bm
 
 	// Save in csv file
 	std::string l_filename = l_file_object.getPath() + "\\features\\features_0.csv";
-	// l_file_object.writeCSV(l_filename, l_mat);
+	l_file_object.writeCSV(l_filename, l_mat);
 
 	// Clear variables
 	l_positive_gradient_vec.clear();
@@ -369,9 +370,9 @@ void computeHOG(const cv::Mat &f_image, std::vector<cv::Mat> &f_gradient_lst, ui
 
 	cv::HOGDescriptor hog(
 		cv::Size(f_width, f_height),			 // winSize
-		cv::Size(f_width / 2, f_height / 2),	 // blockSize
-		cv::Size(f_width / 4, f_height / 4),	 // blockStride
-		cv::Size(f_width / 4, f_height / 4),	 // cellSize
+		cv::Size(f_width / 4, f_height / 4),	 // blockSize
+		cv::Size(f_width / 8, f_height / 8),	 // blockStride
+		cv::Size(f_width / 8, f_height / 8),	 // cellSize
 		9,										 // nbins
 		1,										 // derivAper
 		-1,										 // winSigma
@@ -555,9 +556,13 @@ void trainDetectors(CFile &f_file_object, const std::string &f_model_path)
 	// Prepare SVM object parameters
 	cv::Ptr<cv::ml::SVM> svm_ = cv::ml::SVM::create();
 	svm_->setType(cv::ml::SVM::C_SVC);
-	svm_->setKernel(cv::ml::SVM::RBF);
-	svm_->setC(2.5);
-	svm_->setGamma(0.50625);
+	svm_->setKernel(cv::ml::SVM::CHI2);
+	svm_->setC(12.5);
+	svm_->setGamma(0.03375);
+	svm_->setDegree(0);
+	svm_->setNu(0);
+	svm_->setP(0);
+	svm_->setCoef0(0);
 
 	std::cout << "    --> Number of detectors to train: " << m_number_detectors + 1 << std::endl;
 	// Same steps for each detector
@@ -729,21 +734,22 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 			}
 
 			// Convert to grayscale
-			cv::cvtColor(l_image, l_image, cv::COLOR_RGB2GRAY);
+			cv::Mat l_process_image;
+			cv::cvtColor(l_image, l_process_image, cv::COLOR_RGB2GRAY);
 
 			// Down-scale and upscale the image to filter out the noise
-			cv::GaussianBlur(l_image, l_image, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
+			cv::GaussianBlur(l_process_image, l_process_image, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
 
 			// Improve contrast stretching grayscale histogram
-			stretchHistogram(l_image);
+			stretchHistogram(l_process_image);
 
 			// Create grid over the original image to get the differents square pieces for process and predict
-			for (uint16_t y = 0; y < l_image.rows; y += f_height / m_number_divisions)
+			for (uint16_t y = 0; y < l_process_image.rows; y += f_height / m_number_divisions)
 			{
-				for (uint16_t x = 0; x < l_image.cols; x += f_width / m_number_divisions)
+				for (uint16_t x = 0; x < l_process_image.cols; x += f_width / m_number_divisions)
 				{
 					// Size restriction
-					if (x + f_width > l_image.cols || y + f_height > l_image.rows)
+					if (x + f_width > l_process_image.cols || y + f_height > l_process_image.rows)
 						continue;
 
 					// Car restrictions
@@ -770,7 +776,7 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 
 					// Crop image
 					cv::Rect l_rect = cv::Rect(x, y, f_width, f_height);
-					l_crop_image = l_image(l_rect);
+					l_crop_image = l_process_image(l_rect);
 
 					// Calculate hog for that piece of image
 					if (hogs_sel)
@@ -931,10 +937,10 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 #endif
 
 			// Correct overlap in detections
-			cv::groupRectangles(l_right_rectangles, 5, 0.2);
-			cv::groupRectangles(l_up_rectangles, 5, 0.2);
-			cv::groupRectangles(l_left_rectangles, 5, 0.2);
-			cv::groupRectangles(l_down_rectangles, 5, 0.2);
+			cv::groupRectangles(l_right_rectangles, 4, 0.2);
+			cv::groupRectangles(l_up_rectangles, 4, 0.2);
+			cv::groupRectangles(l_left_rectangles, 4, 0.2);
+			cv::groupRectangles(l_down_rectangles, 4, 0.2);
 
 #ifdef DEBUG_VISUAL_TRACE
 
@@ -980,32 +986,6 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 			cv::imshow("Up detections before group", l_aux_up);
 			cv::waitKey(0);
 #endif
-
-			// uint8_t size = static_cast<uint8_t>(l_right_rectangles.size());
-			// for (int i = 0; i < size; i++)
-			// {
-			// 	l_right_rectangles.push_back(cv::Rect(l_right_rectangles[i]));
-			// }
-			// size = static_cast<uint8_t>(l_left_rectangles.size());
-			// for (int i = 0; i < size; i++)
-			// {
-			// 	l_left_rectangles.push_back(cv::Rect(l_left_rectangles[i]));
-			// }
-			// size = static_cast<uint8_t>(l_up_rectangles.size());
-			// for (int i = 0; i < size; i++)
-			// {
-			// 	l_up_rectangles.push_back(cv::Rect(l_up_rectangles[i]));
-			// }
-			// size = static_cast<uint8_t>(l_down_rectangles.size());
-			// for (int i = 0; i < size; i++)
-			// {
-			// 	l_down_rectangles.push_back(cv::Rect(l_down_rectangles[i]));
-			// }
-
-			// cv::groupRectangles(l_right_rectangles, 1, 0.2);
-			// cv::groupRectangles(l_up_rectangles, 1, 0.2);
-			// cv::groupRectangles(l_left_rectangles, 1, 0.2);
-			// cv::groupRectangles(l_down_rectangles, 1, 0.2);
 
 			// Here develop json detections
 			std::vector<cv::Rect> l_all_rectangles;
