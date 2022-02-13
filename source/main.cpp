@@ -29,10 +29,10 @@
 //  #define MAKE_TEST_SET
 
 // Define to extract features
-//  #define EXTRACT_FEATURES
+#define EXTRACT_FEATURES
 
 // Define to train detectors
-// #define TRAIN_DETECTORS
+#define TRAIN_DETECTORS
 
 // Define to predict how works detectors
 #define PREDICT_IMAGES
@@ -66,16 +66,21 @@ static cv::Scalar colors[] =
 };
 
 // Global variables
-int m_number_detectors = 3;			   // number of detectors - 1 (minus one)
-int m_number_divisions = 6;			   // number of division to process in the image
-float m_group_rectangles_scale = 0.4f; // percentual distance between rectangles to group
-float m_confidence = 0.5f;
-bool hogs_sel = false;
+float m_confidence = 0.65f;
+
 float m_max_dist_slot_short = 190;
 float m_min_dist_slot_short = 135;
 float m_max_dist_slot_long = 395;
 float m_min_dist_slot_long = 305;
 int16_t m_max_slot_overlap = 20;
+
+float m_group_rectangles_scale = 0.2f; // percentual distance between rectangles to group
+int m_number_detectors = 3;			   // number of detectors - 1 (minus one)
+int m_number_divisions = 6;			   // number of division to process in the image
+int m_group_rectangles = 4;
+bool hogs_sel = false;
+bool m_boost_sel = false;
+bool m_svm_sel = true;
 
 int main(int argc, const char *argv[])
 {
@@ -545,25 +550,6 @@ void trainDetectors(CFile &f_file_object, const std::string &f_model_path)
 		cv::flip(l_mat, l_mat, 0);
 	}
 
-	// Prepare boost object parameters
-	cv::Ptr<cv::ml::Boost> boost_ = cv::ml::Boost::create();
-	boost_->setBoostType(cv::ml::Boost::GENTLE);
-	boost_->setWeakCount(100);
-	boost_->setWeightTrimRate(0.99);
-	boost_->setMaxDepth(6);
-	boost_->setUseSurrogates(false);
-
-	// Prepare SVM object parameters
-	cv::Ptr<cv::ml::SVM> svm_ = cv::ml::SVM::create();
-	svm_->setType(cv::ml::SVM::C_SVC);
-	svm_->setKernel(cv::ml::SVM::CHI2);
-	svm_->setC(12.5);
-	svm_->setGamma(0.03375);
-	svm_->setDegree(0);
-	svm_->setNu(0);
-	svm_->setP(0);
-	svm_->setCoef0(0);
-
 	std::cout << "    --> Number of detectors to train: " << m_number_detectors + 1 << std::endl;
 	// Same steps for each detector
 	for (int i = 0; i <= m_number_detectors; i++)
@@ -583,59 +569,90 @@ void trainDetectors(CFile &f_file_object, const std::string &f_model_path)
 		std::cout << "    --> Training models" << std::endl;
 
 		// Boost train data
-		try
+		if (m_boost_sel)
 		{
-			boost_->train(data);
+			// Prepare boost object parameters
+			cv::Ptr<cv::ml::Boost> boost_ = cv::ml::Boost::create();
+			boost_->setBoostType(cv::ml::Boost::GENTLE);
+			boost_->setWeakCount(100);
+			boost_->setWeightTrimRate(0.99);
+			boost_->setMaxDepth(6);
+			boost_->setUseSurrogates(false);
 
-			if (boost_->isTrained())
+			try
 			{
-				std::cout << "    --> Boost model trained" << std::endl;
+				boost_->train(data);
 
-				// Calculate error over the split test data  for Boost model
-				l_error = boost_->calcError(data, true, l_error_mat);
-				std::cout << "    --> Boost error percentage over test: " << l_error << std::endl;
-				// Write csv error model
-				// l_file_object.writeCSV(f_model_path + "\\resources\\" + "ErrorModel_" + std::to_string(i) + ".csv", l_error_mat);
+				if (boost_->isTrained())
+				{
+					std::cout << "    --> Boost model trained" << std::endl;
 
-				// Calculate error over the split train data  for Boost model
-				l_error = boost_->calcError(data, false, l_error_mat);
-				std::cout << "    --> Boost error percentage over train: " << l_error << std::endl;
+					// Calculate error over the split test data  for Boost model
+					l_error = boost_->calcError(data, true, l_error_mat);
+					std::cout << "    --> Boost error percentage over test: " << l_error << std::endl;
+					// Write csv error model
+					// l_file_object.writeCSV(f_model_path + "\\resources\\" + "ErrorModel_" + std::to_string(i) + ".csv", l_error_mat);
 
-				boost_->save(f_model_path + "\\resources\\Boost_MarkPoint_Model_" + std::to_string(i) + ".yml");
-				std::cout << "    --> Models saved" << std::endl;
+					// Calculate error over the split train data  for Boost model
+					l_error = boost_->calcError(data, false, l_error_mat);
+					std::cout << "    --> Boost error percentage over train: " << l_error << std::endl;
 
-				// Clear boost object
-				boost_->clear();
+					boost_->save(f_model_path + "\\resources\\Boost_MarkPoint_Model_" + std::to_string(i) + ".yml");
+					std::cout << "    --> Models saved" << std::endl;
+
+					// Clear boost object
+					boost_->clear();
+				}
+			}
+			catch (const std::exception &e)
+			{ // referencia a base de un objeto polimorfo
+				std::cout << e.what();
 			}
 		}
-		catch (const std::exception &e)
-		{ // referencia a base de un objeto polimorfo
-			std::cout << e.what();
-		}
 
+		if (m_svm_sel)
+		{
+			// Prepare SVM object parameters
+			cv::Ptr<cv::ml::SVM> svm_ = cv::ml::SVM::create();
+			svm_->setType(cv::ml::SVM::C_SVC);
+			svm_->setKernel(cv::ml::SVM::CHI2);
+			// svm_->setC(12.5);
+			// svm_->setGamma(0.03375);
+			// svm_->setDegree(0);
+			// svm_->setNu(0);
+			// svm_->setP(0);
+			// svm_->setCoef0(0);
+			try
+			{
+				svm_->trainAuto(data);
+
+				std::cout << "Gamma: " + std::to_string(svm_->getGamma()) << std::endl;
+				std::cout << "Nu: " + std::to_string(svm_->getNu()) << std::endl;
+				std::cout << "C: " + std::to_string(svm_->getC() )<< std::endl;
+				std::cout << "P: " + std::to_string(svm_->getP() )<< std::endl;
+				std::cout << "Degree: " + std::to_string(svm_->getDegree()) << std::endl;
+
+				if (svm_->isTrained())
+				{
+					std::cout << "    --> SVM model trained" << std::endl;
+
+					// Calculate error over the split test data for SVM model
+					l_error = svm_->calcError(data, true, l_error_mat);
+					std::cout << "    --> SVM error percentage over test: " << l_error << std::endl;
+
+					// Calculate error over the split train data  for SVM model
+					l_error = svm_->calcError(data, false, l_error_mat);
+					std::cout << "    --> SVM error percentage over train: " << l_error << std::endl;
+
+					svm_->save(f_model_path + "\\resources\\SVM_MarkPoint_Model_" + std::to_string(i) + ".yml");
+				}
+			}
+			catch (const std::exception &e)
+			{ // referencia a base de un objeto polimorfo
+				std::cout << e.what();
+			}
+		}
 		// SVM train data
-		try
-		{
-			// svm_->trainAuto(data);
-			if (svm_->isTrained())
-			{
-				std::cout << "    --> SVM model trained" << std::endl;
-
-				// Calculate error over the split test data for SVM model
-				l_error = svm_->calcError(data, true, l_error_mat);
-				std::cout << "    --> SVM error percentage over test: " << l_error << std::endl;
-
-				// Calculate error over the split train data  for SVM model
-				l_error = svm_->calcError(data, false, l_error_mat);
-				std::cout << "    --> SVM error percentage over train: " << l_error << std::endl;
-
-				svm_->save(f_model_path + "\\resources\\SVM_MarkPoint_Model_" + std::to_string(i) + ".yml");
-			}
-		}
-		catch (const std::exception &e)
-		{ // referencia a base de un objeto polimorfo
-			std::cout << e.what();
-		}
 	}
 }
 
@@ -655,9 +672,9 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 	std::vector<float> l_boost_responses, l_svm_responses;
 	cv::Rect2d l_rect_selected;
 	bool l_is_roi_selected = false;
-	float l_distance;
+	double l_distance, l_auxOp;
 	uint32_t l_nFrames = 0U;
-	std::vector<float> l_confidence_vector;
+	std::vector<double> l_confidence_vector;
 	std::vector<cv::Rect> l_up_rectangles, l_down_rectangles, l_right_rectangles, l_left_rectangles;
 	std::list<CSlot> l_slot_list;
 
@@ -683,10 +700,10 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 	}
 
 	// Read and load ML SVM models
-	// for (uint8_t i = 0; i <= m_number_detectors; i++)
-	//{
-	//	l_svm_detectors.push_back(cv::ml::StatModel::load<cv::ml::SVM>(f_model_path + "\\resources\\SVM_MarkPoint_Model_" + std::to_string(i) + ".yml"));
-	// }
+	for (uint8_t i = 0; i <= m_number_detectors; i++)
+	{
+		l_svm_detectors.push_back(cv::ml::StatModel::load<cv::ml::SVM>(f_model_path + "\\resources\\SVM_MarkPoint_Model_" + std::to_string(i) + ".yml"));
+	}
 
 #ifdef READ_VIDEO
 	// Check if video opened successfully
@@ -721,7 +738,7 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 #endif // TIME_PROCESS
 
 			l_image.copyTo(l_painted_boost_img);
-			// l_image.copyTo(l_painted_svm_img);
+			l_image.copyTo(l_painted_svm_img);
 			l_image.copyTo(l_aux);
 			l_image.copyTo(l_aux_lines);
 
@@ -791,94 +808,113 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 					// Traspose features matrix
 					l_gradient.back() = l_gradient.back().t();
 
-					////Predict with SVM detectors
-					// for (uint8_t i = 0; i <= m_number_detectors; i++)
-					//{
-					//	l_svm_responses.push_back( l_svm_detectors[i]->predict(l_gradient.back()) );
-					//	if (l_svm_responses[i] == 1)
-					//	{
-					//		l_distance = distanceSample(l_gradient.back(), l_svm_detectors[i]);
-					//		if (l_distance != 0)
-					//			l_confidence_vector.push_back( 1.0 / ( 1.0 + std::exp(-l_distance) ) );
-					//	}
-					//	else {
-					//		l_confidence_vector.push_back(0);
-					//	}
-					//
-					// }
-
-					////Paint SVM results
-					// for (uint8_t i = 0; i <= m_number_detectors; i++)
-					//{
-					//	if (l_confidence_vector[i] >= m_confidence)
-					//	{
-					//		switch (i)
-					//		{
-					//		case 0:
-					//			cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
-					//			break;
-					//		case 1:
-					//			cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
-					//			break;
-					//		case 2:
-					//			cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
-					//			break;
-					//		case 3:
-					//			cv::rectangle(l_painted_svm_img, l_rect, colors[GREEN]);
-					//			break;
-					//		}
-					//	}
-					// }
-
-					// Predict with Boost detectors
-					for (uint8_t i = 0; i <= m_number_detectors; i++)
+					// Predict with SVM detectors
+					if (m_svm_sel)
 					{
-						l_boost_responses.push_back(l_boost_detectors[i]->predict(l_gradient.back()));
-					}
-
-					// Paint boost results
-					for (uint8_t i = 0; i <= m_number_detectors; i++)
-					{
-						if (l_boost_responses[i] >= 1)
+						for (uint8_t i = 0; i <= m_number_detectors; i++)
 						{
-							switch (i)
+							l_svm_responses.push_back(l_svm_detectors[i]->predict(l_gradient.back()));
+							if (l_svm_responses[i] == 1)
 							{
-							case 0:
-#ifdef DEBUG_VISUAL_TRACE
-								cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
-#endif // DEBUG_VISUAL_TRACE
+								l_distance = distanceSample(l_gradient.back(), l_svm_detectors[i]);
+								if (l_distance != 0)
+									l_auxOp = 1 + std::pow(std::abs(l_distance), 2);
+								l_auxOp = 1 / l_auxOp;
+								l_confidence_vector.push_back(l_auxOp);
+							}
+							else
+							{
+								l_confidence_vector.push_back(0);
+							}
+						}
 
-								// Store rectangles to correct overlapping
-								l_right_rectangles.push_back(l_rect);
-								break;
-							case 1:
+						// Paint SVM results
+						for (uint8_t i = 0; i <= m_number_detectors; i++)
+						{
+							if (l_confidence_vector[i] >= m_confidence)
+							{
+								switch (i)
+								{
+								case 0:
 #ifdef DEBUG_VISUAL_TRACE
-								cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
+									cv::rectangle(l_painted_svm_img, l_rect, colors[RED]);
 #endif // DEBUG_VISUAL_TRACE
-
-								// Store rectangles to correct overlapping
-								l_up_rectangles.push_back(l_rect);
-								break;
-							case 2:
+									l_right_rectangles.push_back(l_rect);
+									break;
+								case 1:
 #ifdef DEBUG_VISUAL_TRACE
-								cv::rectangle(l_painted_boost_img, l_rect, colors[YELLOW]);
+									cv::rectangle(l_painted_svm_img, l_rect, colors[ORANGE]);
 #endif // DEBUG_VISUAL_TRACE
-
-								// Store rectangles to correct overlapping
-								l_left_rectangles.push_back(l_rect);
-								break;
-							case 3:
+									l_up_rectangles.push_back(l_rect);
+									break;
+								case 2:
 #ifdef DEBUG_VISUAL_TRACE
-								cv::rectangle(l_painted_boost_img, l_rect, colors[GREEN]);
+									cv::rectangle(l_painted_svm_img, l_rect, colors[YELLOW]);
 #endif // DEBUG_VISUAL_TRACE
-
-								// Store rectangles to correct overlapping
-								l_down_rectangles.push_back(l_rect);
-								break;
+									l_left_rectangles.push_back(l_rect);
+									break;
+								case 3:
+#ifdef DEBUG_VISUAL_TRACE
+									cv::rectangle(l_painted_svm_img, l_rect, colors[GREEN]);
+#endif // DEBUG_VISUAL_TRACE
+									l_down_rectangles.push_back(l_rect);
+									break;
+								}
 							}
 						}
 					}
 
+					// Predict with Boost detectors
+					if (m_boost_sel)
+					{
+						for (uint8_t i = 0; i <= m_number_detectors; i++)
+						{
+							l_boost_responses.push_back(l_boost_detectors[i]->predict(l_gradient.back()));
+						}
+
+						// Paint boost results
+						for (uint8_t i = 0; i <= m_number_detectors; i++)
+						{
+							if (l_boost_responses[i] >= 1)
+							{
+								switch (i)
+								{
+								case 0:
+#ifdef DEBUG_VISUAL_TRACE
+									cv::rectangle(l_painted_boost_img, l_rect, colors[RED]);
+#endif // DEBUG_VISUAL_TRACE
+
+									// Store rectangles to correct overlapping
+									l_right_rectangles.push_back(l_rect);
+									break;
+								case 1:
+#ifdef DEBUG_VISUAL_TRACE
+									cv::rectangle(l_painted_boost_img, l_rect, colors[ORANGE]);
+#endif // DEBUG_VISUAL_TRACE
+
+									// Store rectangles to correct overlapping
+									l_up_rectangles.push_back(l_rect);
+									break;
+								case 2:
+#ifdef DEBUG_VISUAL_TRACE
+									cv::rectangle(l_painted_boost_img, l_rect, colors[YELLOW]);
+#endif // DEBUG_VISUAL_TRACE
+
+									// Store rectangles to correct overlapping
+									l_left_rectangles.push_back(l_rect);
+									break;
+								case 3:
+#ifdef DEBUG_VISUAL_TRACE
+									cv::rectangle(l_painted_boost_img, l_rect, colors[GREEN]);
+#endif // DEBUG_VISUAL_TRACE
+
+									// Store rectangles to correct overlapping
+									l_down_rectangles.push_back(l_rect);
+									break;
+								}
+							}
+						}
+					}
 					// Clean variables
 					if (!l_gradient.empty())
 					{
@@ -915,7 +951,6 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 			cv::namedWindow("Left detections before group", cv::WINDOW_AUTOSIZE);
 			cv::imshow("Left detections before group", l_aux_left);
 			cv::waitKey(0);
-			cv::imwrite("D:/repositorio/TFG/image.png", l_aux_left);
 
 			for (size_t i = 0; i < l_down_rectangles.size(); i++)
 			{
@@ -937,10 +972,10 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 #endif
 
 			// Correct overlap in detections
-			cv::groupRectangles(l_right_rectangles, 4, 0.2);
-			cv::groupRectangles(l_up_rectangles, 4, 0.2);
-			cv::groupRectangles(l_left_rectangles, 4, 0.2);
-			cv::groupRectangles(l_down_rectangles, 4, 0.2);
+			cv::groupRectangles(l_right_rectangles, m_group_rectangles, m_group_rectangles_scale);
+			cv::groupRectangles(l_up_rectangles, m_group_rectangles, m_group_rectangles_scale);
+			cv::groupRectangles(l_left_rectangles, m_group_rectangles, m_group_rectangles_scale);
+			cv::groupRectangles(l_down_rectangles, m_group_rectangles, m_group_rectangles_scale);
 
 #ifdef DEBUG_VISUAL_TRACE
 
@@ -1012,9 +1047,6 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 			cv::namedWindow("Boost Results for all detectors mixed", cv::WINDOW_AUTOSIZE);
 			cv::imshow("Boost Results for all detectors mixed", l_aux);
 			cv::waitKey(0);
-#endif
-
-			///////////////////////////////////
 
 			for (size_t i = 0; i < l_right_rectangles.size(); i++)
 			{
@@ -1032,6 +1064,7 @@ void predictImages(const std::string &f_model_path, CFile &f_file_object, uint8_
 			{
 				cv::rectangle(l_aux, l_down_rectangles[i], colors[GREEN]);
 			}
+#endif
 
 #ifdef DEBUG_VISUAL_TRACE
 			// Text info
